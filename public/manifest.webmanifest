@@ -1,0 +1,10 @@
+{
+  "name": "Lodge",
+  "short_name": "Lodge",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f2ea",
+  "theme_color": "#1f3d2f",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
