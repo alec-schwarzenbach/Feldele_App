@@ -119,7 +119,7 @@ export function CarForm() {
         {clash.map((b) => (
           <p key={b.id} className="small warn-text">Already booked by {name(b.userId)} ({formatRange(b.start, b.end)})</p>
         ))}
-        <label>Note for Günther (optional)
+        <label>Note for Günter Kobalt (optional)
           <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. pick-up at the station at 18:00" />
         </label>
         <button className="btn primary">Book & notify</button>
