@@ -23,7 +23,7 @@ export function Layout() {
           <NavLink key={t.to} to={t.to} end={t.to === '/'} className={({ isActive }) => (isActive ? 'active' : '')}>
             <span className="tab-icon">
               <Icon name={t.icon} />
-              {t.to === '/car' && unread > 0 && <b className="badge">{unread}</b>}
+              {t.to === '/' && unread > 0 && <b className="badge">{unread}</b>}
             </span>
             <span>{t.label}</span>
           </NavLink>

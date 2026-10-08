@@ -13,6 +13,7 @@ import type {
   Settings,
 } from './types'
 import { isAdmin, isOwner } from './types'
+import { priorityUserFor, stayYear } from './rules'
 
 // Demo backend: keeps everything in localStorage so the app can be tried
 // without any server. Each browser/phone has its own separate copy.
@@ -33,7 +34,7 @@ interface DB {
 
 const KEY = 'lodge-demo-db'
 const SESSION = 'lodge-demo-session'
-const VERSION = 2
+const VERSION = 3
 
 const uid = () => crypto.randomUUID()
 const now = () => new Date().toISOString()
@@ -57,7 +58,7 @@ function seed(): DB {
       p('u-alec', 'Alec', 'alec@lodge.test', 'owner', 'Schwarzenbach'),
       p('u-maria', 'Maria', 'maria@lodge.test', 'member', 'Huber'),
       p('u-thomas', 'Thomas', 'thomas@lodge.test', 'member', 'Gruber'),
-      p('u-gunther', 'Günther', 'guenther@lodge.test', 'car_keeper'),
+      p('u-gunther', 'Günter Kobalt', 'guenther@lodge.test', 'car_keeper'),
     ],
     rooms: [
       { id: 'r-1', name: 'Big bedroom', beds: 2 },
@@ -78,14 +79,14 @@ function seed(): DB {
     ],
     notifications: [
       {
-        id: uid(), userId: 'u-gunther', title: 'Car needed: Maria', read: false, createdAt: now(),
+        id: uid(), userId: 'u-gunther', kind: 'car', title: 'Car needed: Maria', read: false, createdAt: now(),
         body: `Maria needs the car from ${formatDay(addDays(t, 12), true)} to ${formatDay(addDays(t, 16), true)}.`,
       },
     ],
     catches: [
-      { id: uid(), userId: 'u-alec', species: 'Pike', lengthCm: 78, weightKg: 4.2, lat: 47.512, lng: 13.995, caughtAt: addDays(t, -9), bait: 'Spinner', createdAt: now() },
-      { id: uid(), userId: 'u-thomas', species: 'Brown trout', lengthCm: 41, lat: 47.498, lng: 14.012, caughtAt: addDays(t, -19), bait: 'Worm', note: 'Right below the old bridge', createdAt: now() },
-      { id: uid(), userId: 'u-maria', species: 'Perch', lengthCm: 28, lat: 47.505, lng: 13.981, caughtAt: addDays(t, -58), createdAt: now() },
+      { id: uid(), userId: 'u-alec', species: 'Pike', lengthCm: 78, weightKg: 4.2, lat: 47.512, lng: 13.995, caughtAt: addDays(t, -9), reason: 'starving', bait: 'Spinner', createdAt: now() },
+      { id: uid(), userId: 'u-thomas', species: 'Brown trout', lengthCm: 41, lat: 47.498, lng: 14.012, caughtAt: addDays(t, -19), reason: 'injured', bait: 'Worm', note: 'Right below the old bridge', createdAt: now() },
+      { id: uid(), userId: 'u-maria', species: 'Perch', lengthCm: 28, lat: 47.505, lng: 13.981, caughtAt: addDays(t, -58), reason: 'starving', createdAt: now() },
     ],
     posts: [
       {
@@ -112,7 +113,11 @@ function seed(): DB {
       { id: uid(), year: y, category: 'electricity', amount: 960 },
       { id: uid(), year: y, category: 'supplies', amount: 340, note: 'Firewood, cleaning' },
     ],
-    settings: { freeCancelMonths: 4, currency: 'EUR', lodgeName: 'Our Hunting Lodge', lodgeLat: 47.505, lodgeLng: 14.0 },
+    settings: {
+      freeCancelMonths: 4, currency: 'EUR', lodgeName: 'Feldele', lodgeLat: 47.505, lodgeLng: 14.0,
+      families: ['Schwarzenbach', 'Huber', 'Gruber'],
+      priorityOrder: ['u-maria', 'u-thomas', 'u-alec'], priorityStartYear: y,
+    },
   }
 }
 
@@ -174,7 +179,7 @@ export function createLocalApi(): Api {
     const who = db.profiles.find((p) => p.id === b.userId)?.name ?? 'Someone'
     for (const keeper of db.profiles.filter((p) => p.role === 'car_keeper')) {
       db.notifications.push({
-        id: uid(), userId: keeper.id, read: false, createdAt: now(),
+        id: uid(), userId: keeper.id, kind: 'car', read: false, createdAt: now(),
         title: `Car needed: ${who}`,
         body: `${who} needs the car from ${formatDay(b.start, true)} to ${formatDay(b.end, true)}.${b.note ? ' Note: ' + b.note : ''}`,
       })
@@ -228,6 +233,9 @@ export function createLocalApi(): Api {
     getSettings: () => ok(db.settings),
     updateSettings: (patch) => change(() => {
         requireAdmin()
+        if (('priorityOrder' in patch || 'priorityStartYear' in patch) && !isOwner(me())) {
+          throw new Error('Only the owner can set the priority order')
+        }
         Object.assign(db.settings, patch)
       }),
 
@@ -247,7 +255,7 @@ export function createLocalApi(): Api {
     listReservations: () => ok(db.reservations),
     createReservation: (r) =>
       commit(() => {
-        const full: Reservation = { ...r, id: uid(), userId: me().id, status: 'active', createdAt: now() }
+        const full: Reservation = { ...r, id: uid(), userId: me().id, createdAt: now() }
         db.reservations.push(full)
         return structuredClone(full)
       }),
@@ -257,6 +265,18 @@ export function createLocalApi(): Api {
         const r = db.reservations.find((x) => x.id === id)!
         Object.assign(r, { status: 'cancelled', cancelledAt: now(), lateCancel })
         db.carBookings = db.carBookings.filter((b) => b.reservationId !== id)
+      }),
+    bumpReservation: (id, byReservationId) =>
+      change(() => {
+        const r = db.reservations.find((x) => x.id === id)!
+        if (priorityUserFor(stayYear(r), db.settings) !== me().id) throw new Error('Only the priority user can do this')
+        Object.assign(r, { status: 'tentative', bumpedBy: byReservationId })
+      }),
+    confirmReservation: (id) =>
+      change(() => {
+        const r = db.reservations.find((x) => x.id === id)!
+        r.status = 'active'
+        delete r.bumpedBy
       }),
 
     listCarBookings: () => ok(db.carBookings),
@@ -277,6 +297,8 @@ export function createLocalApi(): Api {
         const id = me().id
         db.notifications.forEach((n) => n.userId === id && (n.read = true))
       }),
+    notifyStay: (userId, title, body) =>
+      change(() => db.notifications.push({ id: uid(), userId, kind: 'stay', title, body, read: false, createdAt: now() })),
 
     listCatches: () => ok(db.catches),
     createCatch: (c) => change(() => db.catches.push({ ...c, id: uid(), userId: me().id, createdAt: now() })),

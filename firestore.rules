@@ -39,10 +39,12 @@ service cloud.firestore {
             && changes().hasOnly(['role']));
     }
 
-    // ── Settings & rooms: everyone reads, admins edit ──
+    // ── Settings & rooms: everyone reads, admins edit; only the owner sets the priority order ──
     match /settings/{id} {
       allow read: if approved();
-      allow write: if admin();
+      allow create: if owner();
+      allow update: if owner()
+        || (admin() && !changes().hasAny(['priorityOrder', 'priorityStartYear']));
     }
     match /rooms/{id} {
       allow read: if approved();
@@ -59,34 +61,53 @@ service cloud.firestore {
       return d.start is string && d.end is string && d.end > d.start
         && d.people is int && d.people > 0 && d.roomIds is list;
     }
-    // Is today still on or before the free-cancellation deadline (start minus N months)?
-    function freeCancel(start) {
-      let settings = /databases/$(database)/documents/settings/main;
-      let months = exists(settings) ? get(settings).data.freeCancelMonths : 4;
-      let parts = start.split('-');
-      let total = int(parts[0]) * 12 + int(parts[1]) - 1 - months;
-      let dy = math.floor(total / 12);
-      let dm = total - dy * 12 + 1;
-      let dd = int(parts[2]);
-      let y = request.time.year();
+    // Does the signed-in user have priority in the year this stay starts?
+    // Same rotation as the app: priorityOrder[0] in priorityStartYear, then the next, repeating.
+    function hasPriority(start) {
+      let s = get(/databases/$(database)/documents/settings/main).data;
+      let order = s.get('priorityOrder', []);
+      let n = order.size();
+      let offset = int(start.split('-')[0]) - s.get('priorityStartYear', 0);
+      return n > 0 && order[((offset % n) + n) % n] == request.auth.uid;
+    }
+    // Today as YYYY-MM-DD (UTC), to compare with day strings.
+    function todayDay() {
       let m = request.time.month();
       let d = request.time.day();
-      return y < dy || (y == dy && (m < dm || (m == dm && d <= dd)));
+      return string(request.time.year()) + '-' + (m < 10 ? '0' : '') + string(m) + '-' + (d < 10 ? '0' : '') + string(d);
+    }
+    // A priority booking can only be cancelled for free during its 4 weeks.
+    function claimExpired(r) {
+      return r.get('priorityClaim', false) == true && todayDay() > r.get('claimDeadline', '9999-12-31');
+    }
+    // Fields only the system flow (bump / confirm / cancel) may change.
+    function protectedFields() {
+      return ['status', 'lateCancel', 'cancelledAt', 'createdAt', 'priorityClaim', 'claimDeadline', 'bumpedBy', 'userId'];
     }
 
     match /reservations/{id} {
       allow read: if approved();
-      allow create: if approved() && createsMine()
-        && request.resource.data.status == 'active' && validStay(request.resource.data);
-      allow update: if admin() || (approved() && mine() && createsMine() && resource.data.status == 'active' && (
-        // edit an active stay
-        (request.resource.data.status == 'active' && validStay(request.resource.data)
-          && !changes().hasAny(['lateCancel', 'cancelledAt', 'createdAt']))
-        // cancel: after the deadline it must be marked as a (billed) late cancellation
-        || (request.resource.data.status == 'cancelled'
-          && changes().hasOnly(['status', 'lateCancel', 'cancelledAt'])
-          && (request.resource.data.lateCancel == true || freeCancel(resource.data.start)))
-      ));
+      allow create: if approved() && createsMine() && validStay(request.resource.data)
+        && request.resource.data.status in ['active', 'tentative']
+        // only the year's priority user can take over other people's dates
+        && (request.resource.data.get('priorityClaim', false) == false || hasPriority(request.resource.data.start));
+      allow update: if admin()
+        // edit your own open stay (dates, people, rooms, notes)
+        || (approved() && mine() && resource.data.status != 'cancelled'
+            && validStay(request.resource.data) && !changes().hasAny(protectedFields()))
+        // cancel your own stay; a priority booking past its 4 weeks must be billed
+        || (approved() && mine() && resource.data.status != 'cancelled'
+            && request.resource.data.status == 'cancelled'
+            && changes().hasOnly(['status', 'lateCancel', 'cancelledAt'])
+            && (request.resource.data.lateCancel == true || !claimExpired(resource.data)))
+        // the priority user moves someone else's stay to "maybe"
+        || (approved() && !mine() && resource.data.status == 'active'
+            && request.resource.data.status == 'tentative'
+            && changes().hasOnly(['status', 'bumpedBy']) && hasPriority(resource.data.start))
+        // a "maybe" stay becomes confirmed when the blocking stay is cancelled
+        || (approved() && resource.data.status == 'tentative'
+            && request.resource.data.status == 'active'
+            && changes().hasOnly(['status', 'bumpedBy']));
       allow delete: if admin();
     }
 
@@ -98,19 +119,24 @@ service cloud.firestore {
       allow delete: if admin() || (approved() && mine());
     }
 
-    // Only the car keeper can be sent notifications, and only they can read them.
+    // Car notifications go only to the car owner (Günter). Stay notifications
+    // tell a member that their stay became "maybe" or confirmed.
+    // Only the recipient can read them.
     match /notifications/{id} {
       allow read, delete: if signedIn() && mine();
-      allow create: if approved()
-        && get(profilePath(request.resource.data.userId)).data.role == 'car_keeper'
-        && request.resource.data.read == false;
+      allow create: if approved() && request.resource.data.read == false && (
+        (request.resource.data.kind == 'car'
+          && get(profilePath(request.resource.data.userId)).data.role == 'car_keeper')
+        || (request.resource.data.kind == 'stay'
+          && exists(profilePath(request.resource.data.userId))));
       allow update: if signedIn() && mine() && changes().hasOnly(['read']);
     }
 
     // ── Fishing & board: everyone reads, authors (and admins) edit ──
     match /catches/{id} {
       allow read: if approved();
-      allow create: if approved() && createsMine();
+      allow create: if approved() && createsMine()
+        && request.resource.data.reason in ['starving', 'injured'];
       allow update, delete: if admin() || (approved() && mine() && (request.resource == null || createsMine()));
     }
     match /posts/{id} {

@@ -1,6 +1,6 @@
-# Lodge app
+# Feldele
 
-A phone app for our shared hunting lodge. It covers stays, the fishing map, the info board, the car calendar and the yearly cost split.
+Feldele is a phone app for our shared hunting lodge. It covers stays, the fishing map, the info board, the car calendar and the yearly cost split.
 
 ## Run it locally
 
@@ -19,19 +19,22 @@ With no Firebase config the app runs in **demo mode**. Data is stored only in th
 
 | Area | What it does |
 |---|---|
-| **Stays** | Book arrival/departure, number of people, rooms (with clash detection), an optional party/occasion. Free cancellation until N months before arrival (default 4). Later cancellations still count toward the cost split. |
-| **Car** | Calendar of car bookings, which can be tied to a stay or made on their own. Every booking notifies the car keeper (Günther). |
-| **Fishing** | Map of catches with species, length, weight, bait, photo and date. Filter by species. Tap the map or use GPS to set the spot. |
+| **Stays** | Book arrival/departure, number of people, rooms and an optional party/occasion. If the rooms are taken, you can book as **"maybe"**, which becomes confirmed automatically if the other stay is cancelled. |
+| **Yearly priority** | The owner sets a rotation of members (repeats after the last). The priority user can take over dates someone else booked; that stay becomes "maybe". The priority user then has 4 weeks to cancel for free, after that it is binding. |
+| **Cancelling** | Free unless someone else is affected: if someone is waiting ("maybe") for your rooms, it is free until 4 months before arrival, after that it counts toward your costs. "Maybe" stays are always free to cancel. |
+| **Car** | Calendar of car bookings, tied to a stay or on their own. Every booking notifies the car owner, Günter Kobalt, and nobody else. |
+| **Fishing** | Map of catches with species, length, weight, reason (starving / injured), bait, photo and date. Live GPS: the pin follows your position, or tap the map to set it by hand. |
 | **Board** | Tips, trips, reviews and restaurants with star ratings, photos and comments. Authors can edit and delete their own posts. |
 | **Costs & usage (admins only)** | For each year: stays, nights, person-nights, parties hosted, share % and amount owed per member. Costs are split by person-nights (1 person × 1 night = 1). Download as CSV for Excel or Google Sheets. |
-| **Settings (admin)** | Rooms, lodge name and location, free-cancellation months, currency. |
+| **Families** | Admins keep the list of families; every member picks theirs on their profile. The cost report also shows totals per family. |
+| **Settings (admin)** | Rooms, house name and location, free-cancellation months, currency. |
 
 ### Who sees what
 
 - **Owner** (you): everything, and the only one who can make people admin or car keeper.
 - **Admin**: everything except changing roles. Sees and edits rent, water, electricity and supplies, the cost per night and who owes what.
 - **Member**: Home (upcoming stays and who's been there, without money), Stays (to book), Fishing, Car and Board.
-- **Car keeper** (Günther): the only person who gets the car notifications. There can be only one.
+- **Car owner** (Günter Kobalt): the only person who gets the car notifications. There can be only one.
 - **Waiting for approval**: everyone who signs up. They see nothing until the owner approves them under Profile → Members.
 
 Firebase enforces these rules too ([firestore.rules](firestore.rules), [storage.rules](storage.rules)), so they hold even outside the app.

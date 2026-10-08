@@ -4,7 +4,7 @@ import { MonthCalendar } from '../components/MonthCalendar'
 import { Avatar, Empty, Fab, Header, Segmented } from '../components/ui'
 import { colorFor } from '../lib/colors'
 import { formatDay, formatRange, today } from '../lib/dates'
-import { stayNights } from '../lib/rules'
+import { priorityUserFor, stayNights } from '../lib/rules'
 import { useData } from '../lib/store'
 import type { Reservation } from '../lib/types'
 
@@ -16,10 +16,14 @@ export function Stays() {
   const [day, setDay] = useState<string>()
   const t = today()
   const active = data.reservations.filter((r) => r.status === 'active')
+  // The list also shows "maybe" stays; the calendar only confirmed ones.
+  const open = data.reservations.filter((r) => r.status !== 'cancelled')
+  const priorityId = priorityUserFor(Number(t.slice(0, 4)), data.settings)
+  const nextPriorityId = priorityUserFor(Number(t.slice(0, 4)) + 1, data.settings)
 
   let list: Reservation[]
-  if (day) list = active.filter((r) => r.start <= day && day < r.end)
-  else if (view === 'upcoming') list = active.filter((r) => r.end > t)
+  if (day) list = open.filter((r) => r.start <= day && day < r.end)
+  else if (view === 'upcoming') list = open.filter((r) => r.end > t)
   else if (view === 'past') list = active.filter((r) => r.end <= t).reverse()
   else list = data.reservations.filter((r) => r.userId === user.id).reverse()
   if (view !== 'past' && !day) list.sort((a, b) => a.start.localeCompare(b.start))
@@ -30,6 +34,12 @@ export function Stays() {
     <>
       <Header title="Stays" />
       <div className="page">
+        {priorityId && (
+          <p className="info small">
+            ⭐ Priority {t.slice(0, 4)}: <strong>{name(priorityId)}</strong>
+            {nextPriorityId && <> · {Number(t.slice(0, 4)) + 1}: <strong>{name(nextPriorityId)}</strong></>}
+          </p>
+        )}
         <MonthCalendar
           selected={day}
           onSelect={(d) => setDay(d === day ? undefined : d)}
@@ -60,6 +70,8 @@ export function Stays() {
               </p>
               <p className="small muted">{roomNames(r.roomIds)}</p>
               {r.occasion && <p className="small">🎉 {r.occasion}</p>}
+              {r.status === 'tentative' && <span className="tag warn">Maybe</span>}
+              {r.priorityClaim && r.status === 'active' && <span className="tag">⭐ Priority</span>}
               {r.status === 'cancelled' && (
                 <span className={'tag ' + (r.lateCancel ? 'warn' : '')}>{r.lateCancel ? 'Cancelled late – billed' : 'Cancelled'}</span>
               )}

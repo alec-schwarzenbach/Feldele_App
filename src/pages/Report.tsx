@@ -22,6 +22,16 @@ export function Report() {
   const money = (n: number) => n.toLocaleString(undefined, { style: 'currency', currency: cur, maximumFractionDigits: 0 })
   const money2 = (n: number) => n.toLocaleString(undefined, { style: 'currency', currency: cur })
   const maxPn = Math.max(1, ...report.rows.map((r) => r.personNights))
+  const byFamily = Object.values(
+    report.rows.reduce<Record<string, { family: string; members: string[]; personNights: number; owed: number }>>((acc, r) => {
+      const family = r.user.family || 'No family chosen'
+      acc[family] ??= { family, members: [], personNights: 0, owed: 0 }
+      acc[family].members.push(r.user.name)
+      acc[family].personNights += r.personNights
+      acc[family].owed += r.owed
+      return acc
+    }, {}),
+  ).sort((a, b) => b.owed - a.owed)
 
   function download() {
     const csv = reportToCsv(report, cur)
@@ -29,7 +39,7 @@ export function Report() {
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `lodge-costs-${year}.csv`
+    a.download = `feldele-costs-${year}.csv`
     a.click()
     URL.revokeObjectURL(a.href)
   }
@@ -83,6 +93,18 @@ export function Report() {
             </div>
           )}
         </section>
+
+        {byFamily.length > 1 && (
+          <section className="card">
+            <h2>By family – {year}</h2>
+            {byFamily.map((f) => (
+              <div key={f.family} className="row-head cost-row">
+                <span>{f.family} <span className="muted small">· {f.members.join(', ')} · {f.personNights} person-nights</span></span>
+                <strong>{money(f.owed)}</strong>
+              </div>
+            ))}
+          </section>
+        )}
 
         <section className="card">
           <h2>Costs {year}</h2>

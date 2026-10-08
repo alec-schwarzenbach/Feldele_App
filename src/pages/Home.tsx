@@ -1,19 +1,32 @@
+import { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Avatar, Icon } from '../components/ui'
-import { formatDay, formatRange, today } from '../lib/dates'
-import { buildYearReport } from '../lib/rules'
+import { formatDay, formatRange, timeAgo, today } from '../lib/dates'
+import { buildYearReport, priorityUserFor } from '../lib/rules'
+import { api } from '../lib/api'
 import { useData } from '../lib/store'
 import { isAdmin, isOwner } from '../lib/types'
 
 export function Home() {
-  const { user, data, name } = useData()
+  const { user, data, mutate, name } = useData()
   const nav = useNavigate()
   const t = today()
   const active = data.reservations.filter((r) => r.status === 'active')
   const hereNow = active.filter((r) => r.start <= t && t < r.end)
   const upcoming = active.filter((r) => r.start > t).sort((a, b) => a.start.localeCompare(b.start))
-  const myNext = upcoming.find((r) => r.userId === user.id)
+  const myNext = data.reservations
+    .filter((r) => r.userId === user.id && r.status !== 'cancelled' && r.end > t)
+    .sort((a, b) => a.start.localeCompare(b.start))[0]
   const unread = data.notifications.filter((n) => !n.read)
+  const priorityId = priorityUserFor(Number(t.slice(0, 4)), data.settings)
+
+  // Seeing the notifications here counts as having read them.
+  const hasUnread = unread.length > 0
+  useEffect(() => {
+    if (!hasUnread) return
+    const timer = setTimeout(() => mutate(() => api.markNotificationsRead()), 2500)
+    return () => clearTimeout(timer)
+  }, [hasUnread, mutate])
   const waiting = isOwner(user) ? data.profiles.filter((p) => p.role === 'pending') : []
   const report = buildYearReport(Number(t.slice(0, 4)), data.profiles, data.reservations, data.costs)
   const latestCatch = [...data.catches].sort((a, b) => b.caughtAt.localeCompare(a.caughtAt))[0]
@@ -41,18 +54,27 @@ export function Home() {
           </Link>
         )}
 
-        {unread.length > 0 && (
-          <Link to="/car" className="card notice">
-            <Icon name="bell" />
-            <div>
-              <strong>{unread.length} new car request{unread.length > 1 ? 's' : ''}</strong>
-              <p className="small">{unread[0].body}</p>
-            </div>
-          </Link>
+        {data.notifications.length > 0 && (
+          <section className={'card' + (hasUnread ? ' notice' : '')} style={{ flexDirection: 'column' }}>
+            <h2><Icon name="bell" size={18} /> Notifications{hasUnread && ` (${unread.length} new)`}</h2>
+            {data.notifications.slice(0, 4).map((n) => (
+              <div key={n.id} className={'notif' + (n.read ? '' : ' unread')}>
+                <strong>{n.title}</strong>
+                <p className="small">{n.body}</p>
+                <p className="small muted">{timeAgo(n.createdAt)}</p>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {priorityId && (
+          <p className="info small">
+            ⭐ {priorityId === user.id ? <>You have priority in {t.slice(0, 4)}.</> : <><strong>{name(priorityId)}</strong> has priority in {t.slice(0, 4)}.</>}
+          </p>
         )}
 
         <section className="card">
-          <h2>At the lodge now</h2>
+          <h2>At {data.settings.lodgeName} now</h2>
           {hereNow.length === 0 ? (
             <p className="muted">Nobody is there right now.</p>
           ) : (
@@ -76,7 +98,7 @@ export function Home() {
                 <Icon name="bed" />
                 <div className="grow">
                   <strong>{formatRange(myNext.start, myNext.end)}</strong>
-                  <p className="small muted">{myNext.people} people</p>
+                  <p className="small muted">{myNext.people} people{myNext.status === 'tentative' && ' · "maybe"'}</p>
                 </div>
               </Link>
             ) : (

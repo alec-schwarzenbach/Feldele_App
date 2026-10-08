@@ -34,7 +34,7 @@ export function Login() {
     <div className="login">
       <div className="login-hero">
         <div className="login-logo">🏕️</div>
-        <h1>Lodge</h1>
+        <h1>Feldele</h1>
         <p>Stays, fishing, tips and the car – for all of us.</p>
       </div>
 
@@ -73,7 +73,7 @@ export function Pending({ name }: { name: string }) {
       <div className="login-hero">
         <div className="login-logo">⏳</div>
         <h1>Almost there, {name}</h1>
-        <p>Your account was created. The lodge owner needs to approve it before you can see stays, catches and the board.</p>
+        <p>Your account was created. The owner needs to approve it before you can see stays, catches and the board.</p>
       </div>
       <button className="btn primary" onClick={() => location.reload()}>Check again</button>
       <button className="btn ghost" onClick={() => api.signOut()}>Sign out</button>

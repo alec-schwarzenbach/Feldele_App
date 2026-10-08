@@ -40,9 +40,13 @@ export interface Api {
   deleteRoom(id: string): Promise<void>
 
   listReservations(): Promise<Reservation[]>
-  createReservation(r: Omit<New<Reservation>, 'status'>): Promise<Reservation>
+  createReservation(r: New<Reservation>): Promise<Reservation>
   updateReservation(id: string, patch: Partial<New<Reservation>>): Promise<void>
   cancelReservation(id: string, lateCancel: boolean): Promise<void>
+  /** The year's priority user takes the dates: someone else's stay becomes "maybe". */
+  bumpReservation(id: string, byReservationId: string): Promise<void>
+  /** A "maybe" stay becomes confirmed (the stay blocking it was cancelled). */
+  confirmReservation(id: string): Promise<void>
 
   listCarBookings(): Promise<CarBooking[]>
   createCarBooking(b: New<CarBooking>): Promise<void>
@@ -50,6 +54,8 @@ export interface Api {
 
   listNotifications(): Promise<AppNotification[]>
   markNotificationsRead(): Promise<void>
+  /** Tell someone about a change to their stay. */
+  notifyStay(userId: string, title: string, body: string): Promise<void>
 
   listCatches(): Promise<Catch[]>
   createCatch(c: New<Catch>): Promise<void>

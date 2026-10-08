@@ -1,14 +1,21 @@
 import L from 'leaflet'
-import { useMemo, useState, type FormEvent } from 'react'
-import { MapContainer, Marker, Popup, TileLayer, useMapEvents } from 'react-leaflet'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Circle, CircleMarker, MapContainer, Marker, Popup, TileLayer, useMapEvents } from 'react-leaflet'
 import { useNavigate } from 'react-router-dom'
 import { Empty, Fab, Header, Icon, PhotoPicker, Segmented } from '../components/ui'
 import { api } from '../lib/api'
 import { formatDay, today } from '../lib/dates'
 import { useData } from '../lib/store'
-import { isAdmin, type Catch } from '../lib/types'
+import { isAdmin, type Catch, type CatchReason } from '../lib/types'
+import { useLivePosition, type LivePosition } from '../lib/useLivePosition'
 
 const SPECIES = ['Pike', 'Brown trout', 'Rainbow trout', 'Char', 'Perch', 'Zander', 'Carp', 'Grayling', 'Catfish']
+
+const REASONS: { value: CatchReason; label: string; emoji: string }[] = [
+  { value: 'starving', label: 'Starving', emoji: '🦴' },
+  { value: 'injured', label: 'Injured', emoji: '🩹' },
+]
+const reasonLabel = (r?: CatchReason) => REASONS.find((x) => x.value === r)
 
 const fishIcon = L.divIcon({ className: 'map-pin', html: '<span>🐟</span>', iconSize: [32, 32], iconAnchor: [16, 30] })
 const newIcon = L.divIcon({ className: 'map-pin new', html: '<span>📍</span>', iconSize: [32, 32], iconAnchor: [16, 30] })
@@ -19,6 +26,7 @@ const ATTR = '&copy; OpenStreetMap'
 
 export function Fishing() {
   const { data, name } = useData()
+  const { position: gps } = useLivePosition()
   const [view, setView] = useState<'map' | 'list'>('map')
   const [species, setSpecies] = useState('all')
   const [selected, setSelected] = useState<Catch>()
@@ -50,6 +58,7 @@ export function Fishing() {
                 {catches.map((c) => (
                   <Marker key={c.id} position={[c.lat, c.lng]} icon={fishIcon} eventHandlers={{ click: () => setSelected(c) }} />
                 ))}
+                {gps && <MyPosition gps={gps} />}
               </MapContainer>
             </div>
             {selected ? <CatchCard c={selected} by={name(selected.userId)} /> : <p className="muted small center">Tap a fish to see the catch.</p>}
@@ -81,9 +90,20 @@ function CatchCard({ c, by }: { c: Catch; by: string }) {
         )}
       </div>
       <p><strong>{c.lengthCm} cm</strong>{c.weightKg ? ` · ${c.weightKg} kg` : ''}{c.bait ? ` · bait: ${c.bait}` : ''}</p>
+      {reasonLabel(c.reason) && <span className="tag">{reasonLabel(c.reason)!.emoji} {reasonLabel(c.reason)!.label}</span>}
       <p className="small muted">{by} · {formatDay(c.caughtAt, true)}</p>
       {c.note && <p className="small">{c.note}</p>}
     </article>
+  )
+}
+
+/** Blue dot with an accuracy circle, like in map apps. */
+function MyPosition({ gps }: { gps: LivePosition }) {
+  return (
+    <>
+      <Circle center={[gps.lat, gps.lng]} radius={gps.accuracy} pathOptions={{ color: '#2b7fff', weight: 1, fillOpacity: 0.12 }} />
+      <CircleMarker center={[gps.lat, gps.lng]} radius={7} pathOptions={{ color: '#fff', weight: 2, fillColor: '#2b7fff', fillOpacity: 1 }} />
+    </>
   )
 }
 
@@ -103,27 +123,34 @@ export function CatchForm() {
   const [bait, setBait] = useState('')
   const [note, setNote] = useState('')
   const [photoUrl, setPhoto] = useState<string>()
-  const [pos, setPos] = useState<[number, number]>()
+  const [reason, setReason] = useState<CatchReason>()
+  // The pin follows the live GPS position until the user taps the map.
+  const [manualPos, setManualPos] = useState<[number, number]>()
   const [map, setMap] = useState<L.Map | null>(null)
+  const { position: gps, error: gpsError } = useLivePosition()
+  const pos: [number, number] | undefined = manualPos ?? (gps && [gps.lat, gps.lng])
 
-  function locate() {
-    navigator.geolocation.getCurrentPosition(
-      (p) => {
-        const ll: [number, number] = [p.coords.latitude, p.coords.longitude]
-        setPos(ll)
-        map?.setView(ll, 15)
-      },
-      (err) => alert('Could not get your location: ' + err.message),
-      { enableHighAccuracy: true, timeout: 10000 },
-    )
+  // Jump to the user's position once, when the first GPS fix arrives.
+  const [centered, setCentered] = useState(false)
+  useEffect(() => {
+    if (gps && map && !centered && !manualPos) {
+      map.setView([gps.lat, gps.lng], 16)
+      setCentered(true)
+    }
+  }, [gps, map, centered, manualPos])
+
+  function followGps() {
+    setManualPos(undefined)
+    if (gps) map?.setView([gps.lat, gps.lng], 16)
   }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
+    if (!reason) return alert('Choose why the fish was taken out.')
     if (!pos) return alert('Tap the map to mark where you caught it.')
     const ok = await mutate(async () => {
       await api.createCatch({
-        species: species.trim(), lengthCm: Number(lengthCm), weightKg: weightKg ? Number(weightKg) : undefined,
+        species: species.trim(), lengthCm: Number(lengthCm), weightKg: weightKg ? Number(weightKg) : undefined, reason,
         caughtAt, bait: bait.trim() || undefined, note: note.trim() || undefined, photoUrl, lat: pos[0], lng: pos[1],
       })
       return true
@@ -151,14 +178,33 @@ export function CatchForm() {
         </div>
 
         <div>
-          <div className="row-head">
-            <span className="label">Where? Tap the map</span>
-            <button type="button" className="btn small ghost" onClick={locate}><Icon name="locate" size={16} /> My location</button>
+          <span className="label">Why was it taken out?</span>
+          <div className="reason-pick">
+            {REASONS.map((r) => (
+              <button type="button" key={r.value} className={'room' + (reason === r.value ? ' on' : '')} onClick={() => setReason(r.value)}>
+                <strong>{r.emoji} {r.label}</strong>
+              </button>
+            ))}
           </div>
+        </div>
+
+        <div>
+          <div className="row-head">
+            <span className="label">Where?</span>
+            {manualPos && gps && (
+              <button type="button" className="btn small ghost" onClick={followGps}><Icon name="locate" size={16} /> Use my position</button>
+            )}
+          </div>
+          <p className="small muted gps-status">
+            {manualPos ? '📍 Spot set by hand – tap the map again to move it.'
+              : gps ? `📡 Live GPS (±${Math.round(gps.accuracy)} m) – the pin follows you. Tap the map to set the spot by hand.`
+              : gpsError ?? 'Finding your position… or tap the map.'}
+          </p>
           <div className="map-wrap small">
             <MapContainer center={[s.lodgeLat, s.lodgeLng]} zoom={13} className="map" ref={setMap}>
               <TileLayer url={TILES} attribution={ATTR} />
-              <PickLocation onPick={(lat, lng) => setPos([lat, lng])} />
+              <PickLocation onPick={(lat, lng) => setManualPos([lat, lng])} />
+              {gps && <MyPosition gps={gps} />}
               {pos && <Marker position={pos} icon={newIcon} />}
             </MapContainer>
           </div>

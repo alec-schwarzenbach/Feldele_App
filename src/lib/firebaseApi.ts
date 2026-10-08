@@ -42,7 +42,8 @@ export interface FirebaseConfig {
 }
 
 const DEFAULT_SETTINGS: Settings = {
-  freeCancelMonths: 4, currency: 'EUR', lodgeName: 'Our Hunting Lodge', lodgeLat: 47.505, lodgeLng: 14.0,
+  freeCancelMonths: 4, currency: 'EUR', lodgeName: 'Feldele', lodgeLat: 47.505, lodgeLng: 14.0,
+  families: [], priorityOrder: [], priorityStartYear: new Date().getFullYear(),
 }
 
 const now = () => new Date().toISOString()
@@ -133,7 +134,7 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
 
     listReservations: () => list('reservations'),
     async createReservation(r) {
-      const full = { ...r, userId: myId(), status: 'active' as const, createdAt: now() }
+      const full = { ...r, userId: myId(), createdAt: now() }
       const created = await addDoc(col('reservations'), full)
       return { ...full, id: created.id } as Reservation
     },
@@ -144,6 +145,8 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
       const linked = await getDocs(query(col('carBookings'), where('reservationId', '==', id)))
       await Promise.all(linked.docs.map((d) => deleteDoc(d.ref)))
     },
+    bumpReservation: (id, byReservationId) => updateDoc(doc(db, 'reservations', id), { status: 'tentative', bumpedBy: byReservationId }),
+    confirmReservation: (id) => updateDoc(doc(db, 'reservations', id), { status: 'active', bumpedBy: deleteField() }),
 
     listCarBookings: () => list('carBookings'),
     async createCarBooking(b) {
@@ -155,7 +158,7 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
       batch.set(doc(col('carBookings')), booking)
       for (const k of real(keepers)) {
         batch.set(doc(col('notifications')), {
-          userId: k.id, read: false, createdAt: now(),
+          userId: k.id, kind: 'car', read: false, createdAt: now(),
           title: `Car needed: ${me?.name ?? 'Someone'}`,
           body: `${me?.name ?? 'Someone'} needs the car from ${formatDay(b.start, true)} to ${formatDay(b.end, true)}.`
             + (b.note ? ` Note: ${b.note}` : ''),
@@ -174,6 +177,9 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
       const batch = writeBatch(db)
       snap.docs.forEach((d) => batch.update(d.ref, { read: true }))
       await batch.commit()
+    },
+    async notifyStay(userId, title, body) {
+      await addDoc(col('notifications'), { userId, kind: 'stay', title, body, read: false, createdAt: now() })
     },
 
     listCatches: () => list('catches'),

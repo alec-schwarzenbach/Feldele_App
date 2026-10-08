@@ -1,11 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { MonthCalendar } from '../components/MonthCalendar'
 import { Avatar, Empty, Fab, Header, Icon } from '../components/ui'
 import { api } from '../lib/api'
 import { colorFor } from '../lib/colors'
-import { addDays, formatRange, timeAgo, today } from '../lib/dates'
-import { carConflicts } from '../lib/rules'
+import { addDays, formatRange, today } from '../lib/dates'
+import { carConflicts, carOwnerName } from '../lib/rules'
 import { useData } from '../lib/store'
 import { isAdmin } from '../lib/types'
 
@@ -14,16 +14,6 @@ export function Car() {
   const [day, setDay] = useState<string>()
   const t = today()
   const isKeeper = user.role === 'car_keeper'
-  const unread = data.notifications.some((n) => !n.read)
-
-  // Opening this page counts as having seen the notifications.
-  useEffect(() => {
-    if (unread) {
-      const timer = setTimeout(() => mutate(() => api.markNotificationsRead()), 1500)
-      return () => clearTimeout(timer)
-    }
-  }, [unread, mutate])
-
   // car end dates are inclusive (last day the car is needed)
   const events = data.carBookings.map((b) => ({
     id: b.id, start: b.start, end: addDays(b.end, 1), color: colorFor(b.userId), label: name(b.userId),
@@ -31,28 +21,16 @@ export function Car() {
   const list = data.carBookings
     .filter((b) => (day ? b.start <= day && day <= b.end : b.end >= t))
     .sort((a, b) => a.start.localeCompare(b.start))
-  const keepers = data.profiles.filter((p) => p.role === 'car_keeper').map((p) => p.name)
 
   return (
     <>
       <Header title="Car" />
       <div className="page">
         <p className="muted small">
-          {keepers.length ? `${keepers.join(', ')} gets notified about every booking.` : 'No car keeper set yet (Settings → Members).'}
+          {data.profiles.some((p) => p.role === 'car_keeper')
+            ? `${carOwnerName(data.profiles)} gets notified about every booking – nobody else does.`
+            : 'No car owner set yet (Profile → Members).'}
         </p>
-
-        {data.notifications.length > 0 && (
-          <section className="card">
-            <h2><Icon name="bell" size={18} /> Notifications</h2>
-            {data.notifications.slice(0, 6).map((n) => (
-              <div key={n.id} className={'notif' + (n.read ? '' : ' unread')}>
-                <strong>{n.title}</strong>
-                <p className="small">{n.body}</p>
-                <p className="small muted">{timeAgo(n.createdAt)}</p>
-              </div>
-            ))}
-          </section>
-        )}
 
         <MonthCalendar events={events} selected={day} onSelect={(d) => setDay(d === day ? undefined : d)} />
 
@@ -119,7 +97,7 @@ export function CarForm() {
         {clash.map((b) => (
           <p key={b.id} className="small warn-text">Already booked by {name(b.userId)} ({formatRange(b.start, b.end)})</p>
         ))}
-        <label>Note for Günter Kobalt (optional)
+        <label>Note for {carOwnerName(data.profiles)} (optional)
           <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. pick-up at the station at 18:00" />
         </label>
         <button className="btn primary">Book & notify</button>

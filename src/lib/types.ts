@@ -18,7 +18,8 @@ export interface Room {
   beds: number
 }
 
-export type ReservationStatus = 'active' | 'cancelled'
+/** tentative = "maybe": the rooms are taken; it becomes active if the other stay is cancelled. */
+export type ReservationStatus = 'active' | 'tentative' | 'cancelled'
 
 export interface Reservation {
   id: string
@@ -36,6 +37,12 @@ export interface Reservation {
   cancelledAt?: string
   /** True when cancelled inside the paid window; still counts in the cost split */
   lateCancel?: boolean
+  /** Booked by the year's priority user over someone else's stay */
+  priorityClaim?: boolean
+  /** Last day (YYYY-MM-DD) a priority claim can be cancelled for free */
+  claimDeadline?: string
+  /** For a "maybe" stay: the reservation that pushed it out */
+  bumpedBy?: string
   createdAt: string
 }
 
@@ -52,11 +59,15 @@ export interface CarBooking {
 export interface AppNotification {
   id: string
   userId: string
+  /** car: only ever sent to the car owner. stay: changes to your own stay. */
+  kind: 'car' | 'stay'
   title: string
   body: string
   read: boolean
   createdAt: string
 }
+
+export type CatchReason = 'starving' | 'injured'
 
 export interface Catch {
   id: string
@@ -67,6 +78,8 @@ export interface Catch {
   lat: number
   lng: number
   caughtAt: string
+  /** Why the fish was taken out */
+  reason: CatchReason
   bait?: string
   note?: string
   photoUrl?: string
@@ -111,6 +124,11 @@ export interface Settings {
   lodgeName: string
   lodgeLat: number
   lodgeLng: number
+  /** Families the members can belong to (chosen on their profile) */
+  families: string[]
+  /** Priority rotation: priorityOrder[0] has priority in priorityStartYear, the next one the year after, and so on (repeating). */
+  priorityOrder: string[]
+  priorityStartYear: number
 }
 
 export const isAdmin = (p: Pick<Profile, 'role'>) => p.role === 'admin' || p.role === 'owner'

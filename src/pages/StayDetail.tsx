@@ -2,7 +2,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Avatar, Empty, Header, Icon } from '../components/ui'
 import { api } from '../lib/api'
 import { formatDay, formatRange, today } from '../lib/dates'
-import { freeCancelDeadline, isFreeCancel, stayNights } from '../lib/rules'
+import { cancelTerms, promotable, stayNights, waitingFor } from '../lib/rules'
 import { useData } from '../lib/store'
 import { isAdmin } from '../lib/types'
 
@@ -14,17 +14,28 @@ export function StayDetail() {
   if (!r) return (<><Header title="Stay" back /><Empty>Stay not found.</Empty></>)
 
   const canEdit = r.userId === user.id || isAdmin(user)
-  const free = isFreeCancel(r, data.settings)
-  const deadline = freeCancelDeadline(r, data.settings)
+  const terms = cancelTerms(r, data.reservations, data.settings)
+  const waiting = r.status === 'active' ? waitingFor(r, data.reservations) : []
+  const bumpedBy = r.bumpedBy ? data.reservations.find((x) => x.id === r.bumpedBy) : undefined
   const car = data.carBookings.filter((b) => b.reservationId === r.id)
-  const isUpcoming = r.status === 'active' && r.end > today()
+  const isUpcoming = r.status !== 'cancelled' && r.end > today()
 
   async function cancel() {
-    const msg = free
-      ? 'Cancel this stay? It is free until ' + formatDay(deadline, true) + '.'
-      : `The free cancellation period ended on ${formatDay(deadline, true)}.\n\nIf you cancel now, this stay still counts toward your share of the costs. Cancel anyway?`
+    const msg = terms.charged
+      ? `${terms.why}\n\nIf you cancel now, this stay still counts toward your share of the costs. Cancel anyway?`
+      : `Cancel this stay? ${terms.why}`
     if (!confirm(msg)) return
-    await mutate(() => api.cancelReservation(r!.id, !free))
+    const stay = r!
+    await mutate(async () => {
+      await api.cancelReservation(stay.id, terms.charged)
+      if (stay.status !== 'active') return
+      // Free the rooms: waiting "maybe" stays become confirmed, oldest first.
+      for (const t of promotable(stay, data.reservations)) {
+        await api.confirmReservation(t.id)
+        await api.notifyStay(t.userId, 'Your stay is confirmed 🎉',
+          `${name(stay.userId)} cancelled, so your "maybe" stay ${formatRange(t.start, t.end)} is now confirmed.`)
+      }
+    })
   }
 
   return (
@@ -41,9 +52,15 @@ export function StayDetail() {
               <p className="muted">{formatRange(r.start, r.end)}</p>
             </div>
           </div>
+          {r.status === 'tentative' && (
+            <p className="tag warn">
+              Maybe{bumpedBy ? ` – ${name(bumpedBy.userId)} has priority on these dates` : ' – waiting for the rooms to free up'}
+            </p>
+          )}
+          {r.priorityClaim && r.status === 'active' && <p className="tag">⭐ Booked with priority</p>}
           {r.status === 'cancelled' && (
             <p className={'tag ' + (r.lateCancel ? 'warn' : '')}>
-              {r.lateCancel ? 'Cancelled after the free period – still billed' : 'Cancelled for free'}
+              {r.lateCancel ? 'Cancelled late – still billed' : 'Cancelled for free'}
             </p>
           )}
           <dl className="facts">
@@ -54,6 +71,7 @@ export function StayDetail() {
             {r.occasion && (<><dt>Occasion</dt><dd>🎉 {r.occasion}</dd></>)}
             {r.note && (<><dt>Note</dt><dd>{r.note}</dd></>)}
             <dt>Car</dt><dd>{car.length ? car.map((b) => formatRange(b.start, b.end)).join(', ') : '—'}</dd>
+            {waiting.length > 0 && (<><dt>Waiting</dt><dd>{waiting.map((w) => name(w.userId)).join(', ')} ("maybe")</dd></>)}
           </dl>
         </section>
 
@@ -61,9 +79,9 @@ export function StayDetail() {
           <section className="card">
             <h2>Cancellation</h2>
             <p className="small">
-              {free
-                ? <>Free cancellation until <strong>{formatDay(deadline, true)}</strong>.</>
-                : <>The free period ended on <strong>{formatDay(deadline, true)}</strong>. Cancelling now still counts toward the cost split.</>}
+              {terms.why}
+              {terms.freeUntil && <> Free until <strong>{formatDay(terms.freeUntil, true)}</strong>.</>}
+              {terms.charged && ' Cancelling now still counts toward your costs.'}
             </p>
             {canEdit && <button className="btn danger" onClick={cancel}>Cancel stay</button>}
           </section>

@@ -1,27 +1,106 @@
-import { addMonths, nightsBetween, nightsInYear, overlaps, today } from './dates'
+import { addDays, addMonths, nightsBetween, nightsInYear, overlaps, today } from './dates'
 import type { CarBooking, CostEntry, Profile, Reservation, Settings } from './types'
 
-/** Last day on which a reservation can still be cancelled for free. */
+/** Days a priority user has to cancel for free after taking over someone else's dates. */
+export const CLAIM_FREE_DAYS = 28
+
+/** Last day on which a reservation can still be cancelled for free (if someone else is waiting). */
 export function freeCancelDeadline(r: Pick<Reservation, 'start'>, settings: Settings): string {
   return addMonths(r.start, -settings.freeCancelMonths)
 }
 
-export function isFreeCancel(r: Reservation, settings: Settings, on = today()): boolean {
-  return on <= freeCancelDeadline(r, settings)
+/** Who has priority in a year: the rotation order repeats once everyone had their turn. */
+export function priorityUserFor(year: number, settings: Settings): string | undefined {
+  const order = settings.priorityOrder
+  if (!order.length) return undefined
+  const n = order.length
+  return order[(((year - settings.priorityStartYear) % n) + n) % n]
 }
 
-/** Reservations that occupy at least one of the given rooms in the given period. */
+export const stayYear = (r: Pick<Reservation, 'start'>) => Number(r.start.slice(0, 4))
+
+/** Reservations with the given statuses that share a room with the draft in the same period. */
 export function roomConflicts(
   all: Reservation[],
   draft: { id?: string; start: string; end: string; roomIds: string[] },
+  statuses: Reservation['status'][] = ['active'],
 ): Reservation[] {
   return all.filter(
     (r) =>
-      r.status === 'active' &&
+      statuses.includes(r.status) &&
       r.id !== draft.id &&
       overlaps(r.start, r.end, draft.start, draft.end) &&
       r.roomIds.some((id) => draft.roomIds.includes(id)),
   )
+}
+
+/** Other people's "maybe" stays that are waiting for this stay's rooms. */
+export function waitingFor(r: Reservation, all: Reservation[]): Reservation[] {
+  return roomConflicts(all, r, ['tentative']).filter((t) => t.userId !== r.userId)
+}
+
+export type BookingPlan =
+  | { kind: 'free' }
+  /** Priority user takes the dates; the others become "maybe" */
+  | { kind: 'claim'; bump: Reservation[] }
+  /** Someone else has the rooms: book as "maybe" */
+  | { kind: 'maybe'; blockers: Reservation[] }
+  /** Clashes with your own stay */
+  | { kind: 'own'; conflicts: Reservation[] }
+
+export function planBooking(
+  draft: { id?: string; start: string; end: string; roomIds: string[] },
+  all: Reservation[],
+  settings: Settings,
+  userId: string,
+): BookingPlan {
+  const conflicts = roomConflicts(all, draft)
+  if (!conflicts.length) return { kind: 'free' }
+  const own = conflicts.filter((r) => r.userId === userId)
+  if (own.length) return { kind: 'own', conflicts: own }
+  if (priorityUserFor(stayYear(draft), settings) === userId) return { kind: 'claim', bump: conflicts }
+  return { kind: 'maybe', blockers: conflicts }
+}
+
+export interface CancelTerms {
+  charged: boolean
+  /** Free until this day (inclusive), if it is free now */
+  freeUntil?: string
+  why: string
+}
+
+/**
+ * Cancelling only costs something if someone else is affected:
+ *  - "maybe" stays are always free
+ *  - a priority claim is free for 4 weeks, then binding
+ *  - otherwise: free if nobody is waiting for the rooms, or more than N months before arrival
+ */
+export function cancelTerms(r: Reservation, all: Reservation[], settings: Settings, on = today()): CancelTerms {
+  if (r.status === 'tentative') return { charged: false, why: '"Maybe" stays can always be cancelled for free.' }
+  if (r.priorityClaim && r.claimDeadline) {
+    return on <= r.claimDeadline
+      ? { charged: false, freeUntil: r.claimDeadline, why: 'You used your priority on these dates.' }
+      : { charged: true, why: `You used your priority and the ${CLAIM_FREE_DAYS / 7} weeks to cancel for free are over.` }
+  }
+  const waiting = waitingFor(r, all)
+  if (!waiting.length) return { charged: false, why: 'Nobody else is waiting for these dates, so cancelling is free.' }
+  const deadline = freeCancelDeadline(r, settings)
+  return on <= deadline
+    ? { charged: false, freeUntil: deadline, why: `Others are waiting for these dates (free until ${settings.freeCancelMonths} months before arrival).` }
+    : { charged: true, why: `Others are waiting for these dates and arrival is less than ${settings.freeCancelMonths} months away.` }
+}
+
+export const claimDeadlineFrom = (day = today()) => addDays(day, CLAIM_FREE_DAYS)
+
+/** After a stay is cancelled: which "maybe" stays can now be confirmed (oldest first). */
+export function promotable(cancelled: Reservation, all: Reservation[]): Reservation[] {
+  const active = all.filter((r) => r.status === 'active' && r.id !== cancelled.id)
+  const promoted: Reservation[] = []
+  const waiting = roomConflicts(all, cancelled, ['tentative']).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  for (const t of waiting) {
+    if (!roomConflicts([...active, ...promoted], t).length) promoted.push(t)
+  }
+  return promoted
 }
 
 /** Car bookings use inclusive end days (the last day the car is needed). */
@@ -129,4 +208,9 @@ export function reportToCsv(report: YearReport, currency: string): string {
 
 export function stayNights(r: Reservation): number {
   return nightsBetween(r.start, r.end)
+}
+
+/** Name of the person who gets the car notifications. */
+export function carOwnerName(profiles: Profile[]): string {
+  return profiles.find((p) => p.role === 'car_keeper')?.name ?? 'the car owner'
 }

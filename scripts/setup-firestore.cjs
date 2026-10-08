@@ -12,7 +12,10 @@ const { Client } = require('firebase-tools/lib/apiv2')
 const PROJECT = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '../.firebaserc'), 'utf8')).projects.default
 const now = new Date().toISOString()
 
-const SETTINGS = { freeCancelMonths: 4, currency: 'EUR', lodgeName: 'Feldele', lodgeLat: 47.505, lodgeLng: 14.0 }
+const SETTINGS = {
+  freeCancelMonths: 4, currency: 'EUR', lodgeName: 'Feldele', lodgeLat: 47.505, lodgeLng: 14.0,
+  families: [], priorityOrder: [], priorityStartYear: new Date().getFullYear(),
+}
 
 const ROOMS = [
   { name: 'Big bedroom', beds: 2 },
@@ -23,13 +26,13 @@ const ROOMS = [
 
 const EXAMPLES = {
   profiles: {
-    _about: 'One document per login; the document id is the Firebase Auth user id. role: owner | admin | member | car_keeper | pending. New sign-ups are pending until the owner approves them.',
+    _about: 'One document per login; the document id is the Firebase Auth user id. role: owner | admin | member | car_keeper (car owner) | pending. family: one of settings/main.families, chosen by the member. New sign-ups are pending until the owner approves them.',
     name: 'Example Person', email: 'example@example.com', role: 'member', family: 'Example family', createdAt: now,
   },
   reservations: {
-    _about: 'A stay. start = arrival day, end = departure day (YYYY-MM-DD, end not counted as a night). people includes the member. status: active | cancelled. lateCancel = cancelled after the free period, still counts in the cost split.',
+    _about: 'A stay. start = arrival day, end = departure day (YYYY-MM-DD, end not counted as a night). people includes the member. status: active | tentative ("maybe": rooms taken, waiting) | cancelled. priorityClaim = booked by the priority user of that year over someone else; free to cancel until claimDeadline (4 weeks), then binding. bumpedBy = for a "maybe" stay, the stay that pushed it out. lateCancel = cancelled when it already cost something, still counts in the cost split.',
     userId: '(profile id)', start: '2027-01-15', end: '2027-01-18', people: 4, roomIds: ['(room id)'],
-    occasion: 'Birthday party', note: 'Arriving late', status: 'active', createdAt: now,
+    occasion: 'Birthday party', note: 'Arriving late', status: 'active', priorityClaim: true, claimDeadline: '2026-11-05', createdAt: now,
   },
   carBookings: {
     _about: 'When someone needs the car. end is the last day the car is needed (inclusive). reservationId links it to a stay (optional).',
@@ -37,14 +40,14 @@ const EXAMPLES = {
     note: 'Pick-up at the station at 18:00', createdAt: now,
   },
   notifications: {
-    _about: 'Messages to the car keeper (Günther) about car bookings. Only the recipient can read them.',
-    userId: '(car keeper profile id)', title: 'Car needed: Example Person',
+    _about: 'Messages for one person. kind: car (only ever to the car owner, Günter Kobalt) or stay (your stay became "maybe" or confirmed). Only the recipient can read them.',
+    userId: '(recipient profile id)', kind: 'car', title: 'Car needed: Example Person',
     body: 'Example Person needs the car from 15 Jan 2027 to 18 Jan 2027.', read: false, createdAt: now,
   },
   catches: {
-    _about: 'A fish caught. lat/lng is where it was caught. caughtAt is YYYY-MM-DD. photoUrl points to Storage.',
+    _about: 'A fish taken out. reason: starving | injured. lat/lng is where it was caught (live GPS or tapped on the map). caughtAt is YYYY-MM-DD. photoUrl points to Storage.',
     userId: '(profile id)', species: 'Pike', lengthCm: 78, weightKg: 4.2, lat: 47.512, lng: 13.995,
-    caughtAt: '2026-10-01', bait: 'Spinner', note: 'Below the old bridge', photoUrl: '', createdAt: now,
+    caughtAt: '2026-10-01', reason: 'injured', bait: 'Spinner', note: 'Below the old bridge', photoUrl: '', createdAt: now,
   },
   posts: {
     _about: 'Info board post. category: tip | trip | review | restaurant | other. rating 1–5 for reviews and restaurants.',
