@@ -76,7 +76,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (user) reload().catch((e) => alert(e.message))
+    // Accounts waiting for approval aren't allowed to read anything yet.
+    if (user && user.role !== 'pending') reload().catch((e) => alert(e.message))
     else setData(null)
   }, [user, reload])
 

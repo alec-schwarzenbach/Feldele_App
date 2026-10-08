@@ -11,17 +11,17 @@ import type {
   Settings,
 } from './types'
 import { createLocalApi } from './localApi'
-import { createSupabaseApi } from './supabaseApi'
+import { createFirebaseApi } from './firebaseApi'
 
 export type New<T> = Omit<T, 'id' | 'createdAt' | 'updatedAt' | 'userId'>
 
 /**
  * Everything the UI needs from a backend. Two implementations exist:
  *  - localApi: demo mode, stores data in the browser (no setup needed)
- *  - supabaseApi: real shared backend, enabled when VITE_SUPABASE_URL is set
+ *  - firebaseApi: real shared backend, enabled when VITE_FIREBASE_API_KEY is set
  */
 export interface Api {
-  mode: 'demo' | 'supabase'
+  mode: 'demo' | 'firebase'
 
   currentUser(): Promise<Profile | null>
   onAuthChange(cb: (user: Profile | null) => void): () => void
@@ -71,7 +71,15 @@ export interface Api {
   uploadPhoto(blob: Blob): Promise<string>
 }
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+const env = import.meta.env
+const projectId = env.VITE_FIREBASE_PROJECT_ID as string | undefined
 
-export const api: Api = url && key ? createSupabaseApi(url, key) : createLocalApi()
+export const api: Api = env.VITE_FIREBASE_API_KEY && projectId
+  ? createFirebaseApi({
+      apiKey: env.VITE_FIREBASE_API_KEY,
+      projectId,
+      authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || `${projectId}.firebaseapp.com`,
+      storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || `${projectId}.firebasestorage.app`,
+      appId: env.VITE_FIREBASE_APP_ID,
+    })
+  : createLocalApi()

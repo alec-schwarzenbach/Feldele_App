@@ -27,3 +27,9 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+google-services.json

@@ -73,7 +73,7 @@ export function buildYearReport(
   }
 
   const rows: MemberStats[] = users
-    .filter((u) => u.role !== 'car_keeper')
+    .filter((u) => u.role !== 'car_keeper' && u.role !== 'pending')
     .map((user) => {
       const mine = reservations.filter((r) => r.userId === user.id && isBillable(r) && r.start < upTo)
       let nights = 0

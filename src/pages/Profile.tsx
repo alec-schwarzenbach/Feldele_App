@@ -6,8 +6,10 @@ import { resetDemoData } from '../lib/localApi'
 import { useData } from '../lib/store'
 import { isAdmin, isOwner, type Profile as Member, type Role } from '../lib/types'
 
-const ROLE_LABELS: Record<Role, string> = { owner: 'Owner', admin: 'Admin', member: 'Member', car_keeper: 'Car keeper' }
-const ASSIGNABLE: Role[] = ['member', 'admin', 'car_keeper']
+const ROLE_LABELS: Record<Role, string> = {
+  owner: 'Owner', admin: 'Admin', member: 'Member', car_keeper: 'Car keeper', pending: 'Waiting for approval',
+}
+const ASSIGNABLE: Role[] = ['pending', 'member', 'admin', 'car_keeper']
 
 export function Profile() {
   const { user, data, mutate } = useData()
@@ -90,7 +92,7 @@ export function Profile() {
             }
           }}>Reset demo data</button>
         )}
-        <p className="small muted center">{api.mode === 'demo' ? 'Demo mode – data stored in this browser only' : 'Connected to Supabase'}</p>
+        <p className="small muted center">{api.mode === 'demo' ? 'Demo mode – data stored in this browser only' : 'Connected to Firebase'}</p>
       </div>
     </>
   )

@@ -3,7 +3,7 @@ import { Avatar, Icon } from '../components/ui'
 import { formatDay, formatRange, today } from '../lib/dates'
 import { buildYearReport } from '../lib/rules'
 import { useData } from '../lib/store'
-import { isAdmin } from '../lib/types'
+import { isAdmin, isOwner } from '../lib/types'
 
 export function Home() {
   const { user, data, name } = useData()
@@ -14,6 +14,7 @@ export function Home() {
   const upcoming = active.filter((r) => r.start > t).sort((a, b) => a.start.localeCompare(b.start))
   const myNext = upcoming.find((r) => r.userId === user.id)
   const unread = data.notifications.filter((n) => !n.read)
+  const waiting = isOwner(user) ? data.profiles.filter((p) => p.role === 'pending') : []
   const report = buildYearReport(Number(t.slice(0, 4)), data.profiles, data.reservations, data.costs)
   const latestCatch = [...data.catches].sort((a, b) => b.caughtAt.localeCompare(a.caughtAt))[0]
 
@@ -30,6 +31,16 @@ export function Home() {
       </header>
 
       <div className="page">
+        {waiting.length > 0 && (
+          <Link to="/profile" className="card notice">
+            <Icon name="user" />
+            <div>
+              <strong>{waiting.length} waiting for approval</strong>
+              <p className="small">{waiting.map((p) => p.name).join(', ')} – tap to approve under Members.</p>
+            </div>
+          </Link>
+        )}
+
         {unread.length > 0 && (
           <Link to="/car" className="card notice">
             <Icon name="bell" />

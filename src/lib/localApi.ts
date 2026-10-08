@@ -158,7 +158,7 @@ export function createLocalApi(): Api {
     if (!u) throw new Error('Not signed in')
     return u
   }
-  // Same permission rules the Supabase database enforces (see supabase/schema.sql).
+  // Same permission rules the real database enforces (see firestore.rules).
   const requireAdmin = () => {
     if (!isAdmin(me())) throw new Error('Only admins can do this')
   }

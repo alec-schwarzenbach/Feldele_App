@@ -1,5 +1,8 @@
-/** owner: the one person who can hand out roles. admin: sees and edits costs and settings. */
-export type Role = 'owner' | 'admin' | 'member' | 'car_keeper'
+/**
+ * owner: the one person who can hand out roles. admin: sees and edits costs and settings.
+ * pending: signed up, but sees nothing until the owner approves them.
+ */
+export type Role = 'owner' | 'admin' | 'member' | 'car_keeper' | 'pending'
 
 export interface Profile {
   id: string

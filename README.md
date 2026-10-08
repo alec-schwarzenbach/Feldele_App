@@ -13,7 +13,7 @@ npm run dev
 - On your phone (same Wi-Fi): the `Network:` address Vite prints, e.g. `http://192.168.x.x:5173`
 - To put it on your home screen like an app: Safari → Share → "Add to Home Screen" (Android: Chrome menu → "Add to Home screen").
 
-With no Supabase keys the app runs in **demo mode**. Data is stored only in that browser, and you can sign in as Alec (owner), Maria, Thomas or Günther (car keeper) with the password `demo`.
+With no Firebase config the app runs in **demo mode**. Data is stored only in that browser, and you can sign in as Alec (owner), Maria, Thomas or Günther (car keeper) with the password `demo`.
 
 ## Features
 
@@ -32,24 +32,30 @@ With no Supabase keys the app runs in **demo mode**. Data is stored only in that
 - **Admin**: everything except changing roles. Sees and edits rent, water, electricity and supplies, the cost per night and who owes what.
 - **Member**: Home (upcoming stays and who's been there, without money), Stays (to book), Fishing, Car and Board.
 - **Car keeper** (Günther): the only person who gets the car notifications. There can be only one.
+- **Waiting for approval**: everyone who signs up. They see nothing until the owner approves them under Profile → Members.
 
-The database enforces these rules too, so they hold even outside the app.
+Firebase enforces these rules too ([firestore.rules](firestore.rules), [storage.rules](storage.rules)), so they hold even outside the app.
 
-## Connect the real backend (Supabase)
+## Connect the real backend (Firebase)
 
-1. Create a free project at https://supabase.com.
-2. SQL Editor → New query → paste [supabase/schema.sql](supabase/schema.sql) → Run.
-3. Project Settings → API: copy the URL and the anon key into a new file `.env.local` (see `.env.example`).
-4. Restart `npm run dev`. Create your account in the app, then run in the SQL editor:
-   ```sql
-   update profiles set role = 'owner' where email = 'you@example.com';
-   update profiles set role = 'car_keeper' where email = 'guenther@example.com';
+Firebase project: `feldele`.
+
+1. Firebase console → **Build → Authentication → Get started** → enable **Email/Password**.
+2. **Build → Firestore Database → Create database** (production mode, location `eur3` or a Europe region).
+3. **Build → Storage → Get started** (photo uploads; needs the pay-as-you-go *Blaze* plan, usually €0 at this size; set a budget alert).
+4. **Project settings → General → Your apps → Add app → Web (`</>`)**. Copy `apiKey` and `appId` into `.env.local` (see `.env.example`).
+5. Deploy the security rules:
+   ```bash
+   npx firebase-tools login
+   npx firebase-tools deploy --only firestore:rules,storage
    ```
-5. Optional: Authentication → Providers → Email → turn off "Confirm email" so new members can sign in straight away.
+   (Or paste `firestore.rules` and `storage.rules` into the Rules tabs in the console.)
+6. Restart `npm run dev` and create your account in the app. Then in **Firestore → profiles → (your document)** change `role` from `pending` to `owner`. After that you approve everyone else in the app.
+7. Hosting (Vercel): add the same `VITE_FIREBASE_*` variables in the Vercel project settings, and add the Vercel domain under **Authentication → Settings → Authorized domains**.
 
-## Code map
+$1
 
-- `src/lib/api.ts`: backend interface. `localApi.ts` is the demo backend and `supabaseApi.ts` the real one.
+- `src/lib/api.ts`: backend interface. `localApi.ts` is the demo backend and `firebaseApi.ts` the real one.
 - `src/lib/rules.ts`: cancellation rule, room and car clashes, cost split (`buildYearReport`).
 - `src/pages/*`: one file per screen.
 - `src/index.css`: all styling (mobile-first, light and dark).

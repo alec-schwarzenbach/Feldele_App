@@ -1,0 +1,127 @@
+rules_version = '2';
+
+// Who may read and write what. Deploy with:  npx firebase-tools deploy --only firestore:rules,storage
+//  - owner:      everything; the only one who can change roles (set the owner once in the Firebase console)
+//  - admin:      everything except roles; the only ones who see costs
+//  - member:     stays, car, fishing, board
+//  - car_keeper: same as member; receives the car notifications
+//  - pending:    new sign-up, can only read their own profile until approved
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function profilePath(uid) { return /databases/$(database)/documents/profiles/$(uid); }
+    function me() { return get(profilePath(request.auth.uid)).data; }
+    function hasProfile() { return signedIn() && exists(profilePath(request.auth.uid)); }
+    function approved() { return hasProfile() && me().role != 'pending'; }
+    function admin() { return hasProfile() && me().role in ['owner', 'admin']; }
+    function owner() { return hasProfile() && me().role == 'owner'; }
+
+    function mine() { return resource.data.userId == request.auth.uid; }
+    function createsMine() { return request.resource.data.userId == request.auth.uid; }
+    function changes() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+    // ── Profiles ──
+    match /profiles/{uid} {
+      allow read: if approved() || (signedIn() && request.auth.uid == uid);
+      // Everyone signs up as 'pending'.
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.role == 'pending'
+        && request.resource.data.email == request.auth.token.email;
+      allow update: if
+        // your own name / family
+        (approved() && request.auth.uid == uid && changes().hasOnly(['name', 'family']))
+        // admins can fix names
+        || (admin() && changes().hasOnly(['name', 'family']))
+        // only the owner hands out roles, and never the owner role itself
+        || (owner() && uid != request.auth.uid && resource.data.role != 'owner'
+            && request.resource.data.role in ['pending', 'member', 'admin', 'car_keeper']
+            && changes().hasOnly(['role']));
+    }
+
+    // ── Settings & rooms: everyone reads, admins edit ──
+    match /settings/{id} {
+      allow read: if approved();
+      allow write: if admin();
+    }
+    match /rooms/{id} {
+      allow read: if approved();
+      allow write: if admin();
+    }
+
+    // ── Costs: admins only ──
+    match /costs/{id} {
+      allow read, write: if admin();
+    }
+
+    // ── Reservations ──
+    function validStay(d) {
+      return d.start is string && d.end is string && d.end > d.start
+        && d.people is int && d.people > 0 && d.roomIds is list;
+    }
+    // Is today still on or before the free-cancellation deadline (start minus N months)?
+    function freeCancel(start) {
+      let settings = /databases/$(database)/documents/settings/main;
+      let months = exists(settings) ? get(settings).data.freeCancelMonths : 4;
+      let parts = start.split('-');
+      let total = int(parts[0]) * 12 + int(parts[1]) - 1 - months;
+      let dy = math.floor(total / 12);
+      let dm = total - dy * 12 + 1;
+      let dd = int(parts[2]);
+      let y = request.time.year();
+      let m = request.time.month();
+      let d = request.time.day();
+      return y < dy || (y == dy && (m < dm || (m == dm && d <= dd)));
+    }
+
+    match /reservations/{id} {
+      allow read: if approved();
+      allow create: if approved() && createsMine()
+        && request.resource.data.status == 'active' && validStay(request.resource.data);
+      allow update: if admin() || (approved() && mine() && createsMine() && resource.data.status == 'active' && (
+        // edit an active stay
+        (request.resource.data.status == 'active' && validStay(request.resource.data)
+          && !changes().hasAny(['lateCancel', 'cancelledAt', 'createdAt']))
+        // cancel: after the deadline it must be marked as a (billed) late cancellation
+        || (request.resource.data.status == 'cancelled'
+          && changes().hasOnly(['status', 'lateCancel', 'cancelledAt'])
+          && (request.resource.data.lateCancel == true || freeCancel(resource.data.start)))
+      ));
+      allow delete: if admin();
+    }
+
+    // ── Car ──
+    match /carBookings/{id} {
+      allow read: if approved();
+      allow create: if approved() && createsMine()
+        && request.resource.data.start is string && request.resource.data.end >= request.resource.data.start;
+      allow delete: if admin() || (approved() && mine());
+    }
+
+    // Only the car keeper can be sent notifications, and only they can read them.
+    match /notifications/{id} {
+      allow read, delete: if signedIn() && mine();
+      allow create: if approved()
+        && get(profilePath(request.resource.data.userId)).data.role == 'car_keeper'
+        && request.resource.data.read == false;
+      allow update: if signedIn() && mine() && changes().hasOnly(['read']);
+    }
+
+    // ── Fishing & board: everyone reads, authors (and admins) edit ──
+    match /catches/{id} {
+      allow read: if approved();
+      allow create: if approved() && createsMine();
+      allow update, delete: if admin() || (approved() && mine() && (request.resource == null || createsMine()));
+    }
+    match /posts/{id} {
+      allow read: if approved();
+      allow create: if approved() && createsMine();
+      allow update, delete: if admin() || (approved() && mine() && (request.resource == null || createsMine()));
+    }
+    match /comments/{id} {
+      allow read: if approved();
+      allow create: if approved() && createsMine();
+      allow update, delete: if admin() || (approved() && mine() && (request.resource == null || createsMine()));
+    }
+  }
+}
