@@ -34,7 +34,7 @@ interface DB {
 
 const KEY = 'lodge-demo-db'
 const SESSION = 'lodge-demo-session'
-const VERSION = 3
+const VERSION = 4
 
 const uid = () => crypto.randomUUID()
 const now = () => new Date().toISOString()
@@ -61,18 +61,24 @@ function seed(): DB {
       p('u-gunther', 'Günter Kobalt', 'guenther@lodge.test', 'car_keeper'),
     ],
     rooms: [
-      { id: 'r-1', name: 'Big bedroom', beds: 2 },
-      { id: 'r-2', name: 'Bunk room', beds: 4 },
-      { id: 'r-3', name: 'Attic', beds: 3 },
-      { id: 'r-4', name: 'Living room sofa', beds: 2 },
+      { id: 'DG-Az', area: 'DG', name: 'Arvenzimmer', beds: 2, code: 'DG-Az' },
+      { id: 'DG-EzS', area: 'DG', name: 'Einzelzimmer Süd', beds: 1, code: 'DG-EzS' },
+      { id: 'DG-EzN', area: 'DG', name: 'Einzelzimmer Nord', beds: 1, code: 'DG-EzN' },
+      { id: 'DG-DZ', area: 'DG', name: 'Doppelzimmer', beds: 2, code: 'DG-DZ' },
+      { id: 'OG-Mz', area: 'OG', name: 'Mariazimmer', beds: 2, code: 'OG-Mz' },
+      { id: 'OG-Dz', area: 'OG', name: 'Doppelzimmer', beds: 2, code: 'OG-Dz' },
+      { id: 'J-DzO', area: 'Jägerwohnung', name: 'Doppelzimmer Ost', beds: 2, code: 'J-DzO' },
+      { id: 'J-DzW', area: 'Jägerwohnung', name: 'Doppelzimmer West', beds: 2, code: 'J-DzW' },
+      { id: 'H-DzO', area: 'Harowohnung', name: 'Doppelzimmer Ost', beds: 2, code: 'H-DzO' },
+      { id: 'H-DzW', area: 'Harowohnung', name: 'Doppelzimmer West', beds: 2, code: 'H-DzW' },
     ],
     reservations: [
-      res('res-1', 'u-maria', -60, 5, 4, ['r-1', 'r-2']),
-      res('res-2', 'u-alec', -30, 3, 2, ['r-1']),
-      res('res-3', 'u-thomas', -20, 2, 8, ['r-1', 'r-2', 'r-3'], { occasion: "Thomas' 40th birthday" }),
-      res('res-4', 'u-alec', -10, 4, 3, ['r-3']),
-      res('res-5', 'u-maria', 12, 4, 2, ['r-1']),
-      res('res-6', 'u-thomas', 150, 7, 5, ['r-2', 'r-3']),
+      res('res-1', 'u-maria', -60, 5, 4, ['DG-Az', 'OG-Mz']),
+      res('res-2', 'u-alec', -30, 3, 2, ['DG-Az']),
+      res('res-3', 'u-thomas', -20, 2, 8, ['DG-Az', 'OG-Mz', 'J-DzO'], { occasion: "Thomas' 40th birthday" }),
+      res('res-4', 'u-alec', -10, 4, 3, ['J-DzO']),
+      res('res-5', 'u-maria', 12, 4, 2, ['DG-Az']),
+      res('res-6', 'u-thomas', 150, 7, 5, ['OG-Mz', 'J-DzO']),
     ],
     carBookings: [
       { id: 'car-1', userId: 'u-maria', reservationId: 'res-5', start: addDays(t, 12), end: addDays(t, 16), createdAt: now() },

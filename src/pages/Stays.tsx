@@ -4,7 +4,7 @@ import { MonthCalendar } from '../components/MonthCalendar'
 import { Avatar, Empty, Fab, Header, Segmented } from '../components/ui'
 import { colorFor } from '../lib/colors'
 import { formatDay, formatRange, today } from '../lib/dates'
-import { priorityUserFor, stayNights } from '../lib/rules'
+import { priorityUserFor, roomLabel, stayNights } from '../lib/rules'
 import { useData } from '../lib/store'
 import type { Reservation } from '../lib/types'
 
@@ -28,7 +28,7 @@ export function Stays() {
   else list = data.reservations.filter((r) => r.userId === user.id).reverse()
   if (view !== 'past' && !day) list.sort((a, b) => a.start.localeCompare(b.start))
 
-  const roomNames = (ids: string[]) => ids.map((id) => data.rooms.find((r) => r.id === id)?.name ?? '?').join(', ')
+  const roomNames = (ids: string[]) => ids.map((id) => roomLabel(data.rooms.find((r) => r.id === id))).join(', ')
 
   return (
     <>

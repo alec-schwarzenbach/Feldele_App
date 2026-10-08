@@ -1,5 +1,5 @@
 import { addDays, addMonths, nightsBetween, nightsInYear, overlaps, today } from './dates'
-import type { CarBooking, CostEntry, Profile, Reservation, Settings } from './types'
+import type { CarBooking, CostEntry, Profile, Reservation, Room, Settings } from './types'
 
 /** Days a priority user has to cancel for free after taking over someone else's dates. */
 export const CLAIM_FREE_DAYS = 28
@@ -213,4 +213,17 @@ export function stayNights(r: Reservation): number {
 /** Name of the person who gets the car notifications. */
 export function carOwnerName(profiles: Profile[]): string {
   return profiles.find((p) => p.role === 'car_keeper')?.name ?? 'the car owner'
+}
+
+/** "Doppelzimmer (OG)" – the area tells apart rooms with the same name. */
+export function roomLabel(room: Room | undefined): string {
+  if (!room) return '?'
+  return room.area ? `${room.name} (${room.area})` : room.name
+}
+
+/** Rooms grouped by area, keeping the order they were added in. */
+export function roomsByArea(rooms: Room[]): [string, Room[]][] {
+  const groups = new Map<string, Room[]>()
+  for (const r of rooms) groups.set(r.area ?? '', [...(groups.get(r.area ?? '') ?? []), r])
+  return [...groups]
 }

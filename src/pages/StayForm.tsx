@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Header } from '../components/ui'
 import { api } from '../lib/api'
 import { addDays, formatDay, formatRange, nightsBetween, today } from '../lib/dates'
-import { carConflicts, carOwnerName, claimDeadlineFrom, CLAIM_FREE_DAYS, freeCancelDeadline, planBooking, priorityUserFor, roomConflicts } from '../lib/rules'
+import { carConflicts, carOwnerName, claimDeadlineFrom, CLAIM_FREE_DAYS, freeCancelDeadline, planBooking, priorityUserFor, roomConflicts, roomsByArea } from '../lib/rules'
 import { useData } from '../lib/store'
 
 export function StayForm() {
@@ -102,19 +102,26 @@ export function StayForm() {
 
         <fieldset>
           <legend>Rooms</legend>
-          <div className="room-list">
-            {data.rooms.map((room) => {
-              const taken = takenRoom(room.id)
-              const on = roomIds.includes(room.id)
-              return (
-                <button type="button" key={room.id}
-                  className={'room' + (on ? ' on' : '') + (taken ? ' taken' : '')} onClick={() => toggleRoom(room.id)}>
-                  <strong>{room.name}</strong>
-                  <span className="small">{taken ? 'Booked by someone' : `${room.beds} beds`}</span>
-                </button>
-              )
-            })}
-          </div>
+          {roomsByArea(data.rooms).map(([area, rooms]) => (
+            <div key={area}>
+              {area && <p className="room-area">{area}</p>}
+              <div className="room-list">
+                {rooms.map((room) => {
+                  const taken = takenRoom(room.id)
+                  const on = roomIds.includes(room.id)
+                  return (
+                    <button type="button" key={room.id}
+                      className={'room' + (on ? ' on' : '') + (taken ? ' taken' : '')} onClick={() => toggleRoom(room.id)}>
+                      <strong>{room.name}</strong>
+                      <span className="small">
+                        {taken ? 'Booked by someone' : `${room.beds} bed${room.beds === 1 ? '' : 's'}`}{room.code ? ` · ${room.code}` : ''}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
           {roomIds.length > 0 && people > beds && (
             <p className="small warn-text">{people} people but only {beds} beds selected.</p>
           )}

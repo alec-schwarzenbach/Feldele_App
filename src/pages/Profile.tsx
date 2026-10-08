@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Avatar, Header, Icon } from '../components/ui'
 import { api } from '../lib/api'
 import { resetDemoData } from '../lib/localApi'
-import { priorityUserFor } from '../lib/rules'
+import { priorityUserFor, roomLabel } from '../lib/rules'
 import { useData } from '../lib/store'
 import { isAdmin, isOwner, type Profile as Member, type Role } from '../lib/types'
 
@@ -118,6 +118,8 @@ function AdminSettings() {
   const [roomName, setRoomName] = useState('')
   const [roomBeds, setRoomBeds] = useState('2')
   const [familyName, setFamilyName] = useState('')
+  const [roomArea, setRoomArea] = useState('')
+  const [roomCode, setRoomCode] = useState('')
 
   async function save(e: FormEvent) {
     e.preventDefault()
@@ -137,8 +139,11 @@ function AdminSettings() {
 
   async function addRoom(e: FormEvent) {
     e.preventDefault()
-    await mutate(() => api.saveRoom({ name: roomName.trim(), beds: Number(roomBeds) }))
+    await mutate(() => api.saveRoom({
+      name: roomName.trim(), beds: Number(roomBeds), area: roomArea.trim() || undefined, code: roomCode.trim() || undefined,
+    }))
     setRoomName('')
+    setRoomCode('')
   }
 
   return (
@@ -164,9 +169,9 @@ function AdminSettings() {
         <h2>Rooms</h2>
         {data.rooms.map((r) => (
           <div key={r.id} className="row-head cost-row">
-            <span>{r.name} <span className="muted small">· {r.beds} beds</span></span>
+            <span>{roomLabel(r)} <span className="muted small">· {r.beds} bed{r.beds === 1 ? '' : 's'}{r.code ? ` · ${r.code}` : ''}</span></span>
             <button className="icon-btn" aria-label="Delete room"
-              onClick={() => confirm(`Delete room "${r.name}"?`) && mutate(() => api.deleteRoom(r.id))}>
+              onClick={() => confirm(`Delete room "${roomLabel(r)}"?`) && mutate(() => api.deleteRoom(r.id))}>
               <Icon name="trash" size={16} />
             </button>
           </div>
@@ -176,6 +181,11 @@ function AdminSettings() {
             <label>New room<input value={roomName} onChange={(e) => setRoomName(e.target.value)} required /></label>
             <label>Beds<input type="number" min={1} value={roomBeds} onChange={(e) => setRoomBeds(e.target.value)} /></label>
           </div>
+          <div className="grid2">
+            <label>Where (e.g. DG)<input value={roomArea} onChange={(e) => setRoomArea(e.target.value)} list="room-areas" /></label>
+            <label>Short form<input value={roomCode} onChange={(e) => setRoomCode(e.target.value)} placeholder="e.g. DG-Az" /></label>
+          </div>
+          <datalist id="room-areas">{[...new Set(data.rooms.map((r) => r.area).filter(Boolean))].map((a) => <option key={a} value={a} />)}</datalist>
           <button className="btn">Add room</button>
         </form>
       </section>

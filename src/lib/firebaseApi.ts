@@ -26,7 +26,7 @@ import {
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage'
 import type { Api } from './api'
 import { formatDay } from './dates'
-import type { AppNotification, CarBooking, Post, Profile, Reservation, Settings } from './types'
+import type { AppNotification, CarBooking, Post, Profile, Reservation, Room, Settings } from './types'
 import { isAdmin } from './types'
 
 // Real backend on Firebase. Documents store the same camelCase fields as the
@@ -125,7 +125,7 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
     },
     updateSettings: (p) => setDoc(doc(db, 'settings', 'main'), p, { merge: true }),
 
-    listRooms: () => list('rooms'),
+    listRooms: async () => (await list<Room>('rooms')).sort((a, b) => (a.sort ?? 999) - (b.sort ?? 999)),
     async saveRoom({ id, ...room }) {
       if (id) await update('rooms', id, room)
       else await addDoc(col('rooms'), room)

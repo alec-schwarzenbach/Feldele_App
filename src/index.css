@@ -266,3 +266,4 @@ legend { font-size: 0.85rem; font-weight: 600; color: var(--muted); padding: 0 4
 .reason-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
 .reason-pick .room { align-items: center; padding: 14px 10px; }
 .gps-status { margin: 4px 0 0; }
+.room-area { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 6px 0 4px; }

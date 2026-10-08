@@ -16,6 +16,12 @@ export interface Room {
   id: string
   name: string
   beds: number
+  /** Where in the house, e.g. DG, OG, Jägerwohnung */
+  area?: string
+  /** Short form, e.g. DG-Az */
+  code?: string
+  /** Display order (lower first) */
+  sort?: number
 }
 
 /** tentative = "maybe": the rooms are taken; it becomes active if the other stay is cancelled. */

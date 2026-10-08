@@ -2,7 +2,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Avatar, Empty, Header, Icon } from '../components/ui'
 import { api } from '../lib/api'
 import { formatDay, formatRange, today } from '../lib/dates'
-import { cancelTerms, promotable, stayNights, waitingFor } from '../lib/rules'
+import { cancelTerms, promotable, roomLabel, stayNights, waitingFor } from '../lib/rules'
 import { useData } from '../lib/store'
 import { isAdmin } from '../lib/types'
 
@@ -67,7 +67,7 @@ export function StayDetail() {
             <dt>Nights</dt><dd>{stayNights(r)}</dd>
             <dt>People</dt><dd>{r.people}</dd>
             <dt>Person-nights</dt><dd>{stayNights(r) * r.people}</dd>
-            <dt>Rooms</dt><dd>{r.roomIds.map((rid) => data.rooms.find((x) => x.id === rid)?.name ?? '?').join(', ')}</dd>
+            <dt>Rooms</dt><dd>{r.roomIds.map((rid) => roomLabel(data.rooms.find((x) => x.id === rid))).join(', ')}</dd>
             {r.occasion && (<><dt>Occasion</dt><dd>🎉 {r.occasion}</dd></>)}
             {r.note && (<><dt>Note</dt><dd>{r.note}</dd></>)}
             <dt>Car</dt><dd>{car.length ? car.map((b) => formatRange(b.start, b.end)).join(', ') : '—'}</dd>

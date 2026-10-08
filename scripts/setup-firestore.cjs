@@ -18,10 +18,16 @@ const SETTINGS = {
 }
 
 const ROOMS = [
-  { name: 'Big bedroom', beds: 2 },
-  { name: 'Bunk room', beds: 4 },
-  { name: 'Attic', beds: 3 },
-  { name: 'Living room sofa', beds: 2 },
+  { area: 'DG', name: 'Arvenzimmer', beds: 2, code: 'DG-Az' },
+  { area: 'DG', name: 'Einzelzimmer Süd', beds: 1, code: 'DG-EzS' },
+  { area: 'DG', name: 'Einzelzimmer Nord', beds: 1, code: 'DG-EzN' },
+  { area: 'DG', name: 'Doppelzimmer', beds: 2, code: 'DG-DZ' },
+  { area: 'OG', name: 'Mariazimmer', beds: 2, code: 'OG-Mz' },
+  { area: 'OG', name: 'Doppelzimmer', beds: 2, code: 'OG-Dz' },
+  { area: 'Jägerwohnung', name: 'Doppelzimmer Ost', beds: 2, code: 'J-DzO' },
+  { area: 'Jägerwohnung', name: 'Doppelzimmer West', beds: 2, code: 'J-DzW' },
+  { area: 'Harowohnung', name: 'Doppelzimmer Ost', beds: 2, code: 'H-DzO' },
+  { area: 'Harowohnung', name: 'Doppelzimmer West', beds: 2, code: 'H-DzW' },
 ]
 
 const EXAMPLES = {
@@ -96,7 +102,7 @@ async function main() {
   const rooms = await api.get(`${docs}/rooms?pageSize=1`)
   if (rooms.body.documents?.length) console.log('rooms already exist – kept')
   else {
-    for (const room of ROOMS) await api.post(`${docs}/rooms`, { fields: fields(room) })
+    for (const [i, room] of ROOMS.entries()) await set(`rooms/${room.code}`, { ...room, sort: i + 1 })
     console.log(`created ${ROOMS.length} starter rooms`)
   }
 
