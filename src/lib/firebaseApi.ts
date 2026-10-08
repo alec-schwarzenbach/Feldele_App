@@ -47,8 +47,11 @@ const DEFAULT_SETTINGS: Settings = {
 
 const now = () => new Date().toISOString()
 
+/** Documents whose id starts with "_" are examples for the console (see scripts/setup-firestore.cjs). */
+const real = (snap: QuerySnapshot<DocumentData>) => snap.docs.filter((d) => !d.id.startsWith('_'))
+
 function rows<T>(snap: QuerySnapshot<DocumentData>): T[] {
-  return snap.docs.map((d) => ({ ...d.data(), id: d.id }) as T)
+  return real(snap).map((d) => ({ ...d.data(), id: d.id }) as T)
 }
 
 /** Firestore can't store `undefined`; in an update it means "remove this field". */
@@ -150,7 +153,7 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
       // Booking and notification are saved together, or not at all.
       const batch = writeBatch(db)
       batch.set(doc(col('carBookings')), booking)
-      for (const k of keepers.docs) {
+      for (const k of real(keepers)) {
         batch.set(doc(col('notifications')), {
           userId: k.id, read: false, createdAt: now(),
           title: `Car needed: ${me?.name ?? 'Someone'}`,
