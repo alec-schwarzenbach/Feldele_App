@@ -6,6 +6,7 @@ import type {
   Catch,
   Comment,
   CostEntry,
+  Family,
   Post,
   Profile,
   Reservation,
@@ -18,6 +19,7 @@ import type {
 
 export interface Data {
   profiles: Profile[]
+  families: Family[]
   settings: Settings
   rooms: Room[]
   reservations: Reservation[]
@@ -37,14 +39,19 @@ interface Store {
   /** Runs a change, then reloads data. Errors are shown as alerts. */
   mutate: <T>(fn: () => Promise<T>) => Promise<T | undefined>
   name: (userId: string) => string
+  /** Family name for a family id */
+  familyName: (familyId: string | undefined) => string
+  /** Call after the signed-in user's own profile changed (e.g. family chosen) */
+  refreshUser: () => Promise<void>
 }
 
 const Ctx = createContext<Store | null>(null)
 
 async function loadAll(): Promise<Data> {
-  const [profiles, settings, rooms, reservations, carBookings, notifications, catches, posts, comments, costs] =
+  const [profiles, families, settings, rooms, reservations, carBookings, notifications, catches, posts, comments, costs] =
     await Promise.all([
       api.listProfiles(),
+      api.listFamilies(),
       api.getSettings(),
       api.listRooms(),
       api.listReservations(),
@@ -55,7 +62,7 @@ async function loadAll(): Promise<Data> {
       api.listComments(),
       api.listCosts(),
     ])
-  return { profiles, settings, rooms, reservations, carBookings, notifications, catches, posts, comments, costs }
+  return { profiles, families, settings, rooms, reservations, carBookings, notifications, catches, posts, comments, costs }
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -76,8 +83,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    // Accounts waiting for approval aren't allowed to read anything yet.
-    if (user && user.role !== 'pending') reload().catch((e) => alert(e.message))
+    // People without a family, or waiting for approval, can't read the data yet.
+    if (user && user.familyId && user.role !== 'pending') reload().catch((e) => alert(e.message))
     else setData(null)
   }, [user, reload])
 
@@ -100,7 +107,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [data],
   )
 
-  return <Ctx.Provider value={{ user, authReady, data, reload, mutate, name }}>{children}</Ctx.Provider>
+  const familyName = useCallback(
+    (familyId: string | undefined) => data?.families.find((f) => f.id === familyId)?.name ?? 'No family',
+    [data],
+  )
+
+  const refreshUser = useCallback(async () => {
+    setUser(await api.currentUser())
+  }, [])
+
+  return <Ctx.Provider value={{ user, authReady, data, reload, mutate, name, familyName, refreshUser }}>{children}</Ctx.Provider>
 }
 
 export function useStore() {

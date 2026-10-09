@@ -2,13 +2,13 @@ import { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Avatar, Icon } from '../components/ui'
 import { formatDay, formatRange, timeAgo, today } from '../lib/dates'
-import { buildYearReport, priorityUserFor } from '../lib/rules'
+import { buildYearReport, familyLabel, priorityFamilyFor } from '../lib/rules'
 import { api } from '../lib/api'
 import { useData } from '../lib/store'
 import { isAdmin, isOwner } from '../lib/types'
 
 export function Home() {
-  const { user, data, mutate, name } = useData()
+  const { user, data, mutate, name, familyName } = useData()
   const nav = useNavigate()
   const t = today()
   const active = data.reservations.filter((r) => r.status === 'active')
@@ -18,7 +18,7 @@ export function Home() {
     .filter((r) => r.userId === user.id && r.status !== 'cancelled' && r.end > t)
     .sort((a, b) => a.start.localeCompare(b.start))[0]
   const unread = data.notifications.filter((n) => !n.read)
-  const priorityId = priorityUserFor(Number(t.slice(0, 4)), data.settings)
+  const priorityId = priorityFamilyFor(Number(t.slice(0, 4)), data.settings)
 
   // Seeing the notifications here counts as having read them.
   const hasUnread = unread.length > 0
@@ -28,7 +28,7 @@ export function Home() {
     return () => clearTimeout(timer)
   }, [hasUnread, mutate])
   const waiting = isOwner(user) ? data.profiles.filter((p) => p.role === 'pending') : []
-  const report = buildYearReport(Number(t.slice(0, 4)), data.profiles, data.reservations, data.costs)
+  const report = buildYearReport(Number(t.slice(0, 4)), data.profiles, data.families, data.reservations, data.costs)
   const latestCatch = [...data.catches].sort((a, b) => b.caughtAt.localeCompare(a.caughtAt))[0]
 
   return (
@@ -69,7 +69,7 @@ export function Home() {
 
         {priorityId && (
           <p className="info small">
-            ⭐ {priorityId === user.id ? <>You have priority in {t.slice(0, 4)}.</> : <><strong>{name(priorityId)}</strong> has priority in {t.slice(0, 4)}.</>}
+            ⭐ {priorityId === user.familyId ? <>Your family has priority in {t.slice(0, 4)}.</> : <>Family <strong>{familyName(priorityId)}</strong> has priority in {t.slice(0, 4)}.</>}
           </p>
         )}
 
@@ -127,13 +127,17 @@ export function Home() {
             <h2>Who's been there – {report.year}</h2>
             <Icon name="chart" />
           </div>
-          {report.rows.filter((r) => r.personNights > 0).map((r, i) => (
-            <div key={r.user.id} className="rank">
+          {report.families.filter((f) => f.personNights > 0).map((f, i) => (
+            <div key={f.family?.id ?? 'none'} className="rank">
               <span className="rank-n">{i + 1}</span>
-              <span className="grow">{r.user.name}</span>
-              <span className="muted small">{r.nights} nights · {r.personNights} person-nights</span>
+              <span className="grow">
+                {familyLabel(f.family)}
+                <br /><span className="small muted">{f.members.filter((m) => m.personNights > 0).map((m) => m.user.name).join(', ')}</span>
+              </span>
+              <span className="muted small">{f.nights} nights · {f.personNights} person-nights</span>
             </div>
           ))}
+          {report.totalPersonNights === 0 && <p className="muted small">No nights yet this year.</p>}
           {isAdmin(user) && <Link to="/report" className="small accent">See costs & who pays what →</Link>}
         </section>
 

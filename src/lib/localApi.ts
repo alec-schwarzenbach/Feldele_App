@@ -6,6 +6,7 @@ import type {
   Catch,
   Comment,
   CostEntry,
+  Family,
   Post,
   Profile,
   Reservation,
@@ -13,7 +14,7 @@ import type {
   Settings,
 } from './types'
 import { isAdmin, isOwner } from './types'
-import { priorityUserFor, stayYear } from './rules'
+import { priorityFamilyFor, stayYear } from './rules'
 
 // Demo backend: keeps everything in localStorage so the app can be tried
 // without any server. Each browser/phone has its own separate copy.
@@ -21,6 +22,7 @@ import { priorityUserFor, stayYear } from './rules'
 interface DB {
   version: number
   profiles: (Profile & { password: string })[]
+  families: Family[]
   rooms: Room[]
   reservations: Reservation[]
   carBookings: CarBooking[]
@@ -34,7 +36,7 @@ interface DB {
 
 const KEY = 'lodge-demo-db'
 const SESSION = 'lodge-demo-session'
-const VERSION = 4
+const VERSION = 5
 
 const uid = () => crypto.randomUUID()
 const now = () => new Date().toISOString()
@@ -42,8 +44,8 @@ const now = () => new Date().toISOString()
 function seed(): DB {
   const t = today()
   const y = Number(t.slice(0, 4))
-  const p = (id: string, name: string, email: string, role: Profile['role'], family?: string) => ({
-    id, name, email, role, family, password: 'demo',
+  const p = (id: string, name: string, email: string, role: Profile['role'], familyId?: string) => ({
+    id, name, email, role, familyId, password: 'demo',
   })
   const res = (
     id: string, userId: string, startOffset: number, nights: number, people: number,
@@ -55,10 +57,16 @@ function seed(): DB {
   return {
     version: VERSION,
     profiles: [
-      p('u-alec', 'Alec', 'alec@lodge.test', 'owner', 'Schwarzenbach'),
-      p('u-maria', 'Maria', 'maria@lodge.test', 'member', 'Huber'),
-      p('u-thomas', 'Thomas', 'thomas@lodge.test', 'member', 'Gruber'),
-      p('u-gunther', 'Günter Kobalt', 'guenther@lodge.test', 'car_keeper'),
+      p('u-alec', 'Alec', 'alec@lodge.test', 'owner', 'f-schwarzenbach'),
+      p('u-maria', 'Maria', 'maria@lodge.test', 'member', 'f-huber'),
+      p('u-thomas', 'Thomas', 'thomas@lodge.test', 'member', 'f-gruber'),
+      p('u-gunther', 'Günter Kobalt', 'guenther@lodge.test', 'car_keeper', 'f-kobalt'),
+    ],
+    families: [
+      { id: 'f-schwarzenbach', name: 'Schwarzenbach' },
+      { id: 'f-huber', name: 'Huber' },
+      { id: 'f-gruber', name: 'Gruber' },
+      { id: 'f-kobalt', name: 'Kobalt' },
     ],
     rooms: [
       { id: 'DG-Az', area: 'DG', name: 'Arvenzimmer', beds: 2, code: 'DG-Az' },
@@ -121,8 +129,7 @@ function seed(): DB {
     ],
     settings: {
       freeCancelMonths: 4, currency: 'EUR', lodgeName: 'Feldele', lodgeLat: 47.505, lodgeLng: 14.0,
-      families: ['Schwarzenbach', 'Huber', 'Gruber'],
-      priorityOrder: ['u-maria', 'u-thomas', 'u-alec'], priorityStartYear: y,
+      priorityOrder: ['f-huber', 'f-gruber', 'f-schwarzenbach'], priorityStartYear: y,
     },
   }
 }
@@ -226,6 +233,8 @@ export function createLocalApi(): Api {
       change(() => {
         const u = me()
         if (id !== u.id) requireAdmin()
+        // You choose your own family once; after that only admins can change it.
+        if ('familyId' in patch && id === u.id && u.familyId && !isAdmin(u)) throw new Error('Ask an admin to change your family')
         if (patch.role) {
           if (!isOwner(u)) throw new Error('Only the owner can change roles')
           if (patch.role === 'owner') throw new Error('There can only be one owner')
@@ -234,6 +243,24 @@ export function createLocalApi(): Api {
           }
         }
         Object.assign(db.profiles.find((p) => p.id === id)!, patch)
+      }),
+
+    listFamilies: () => ok([...db.families].sort((a, b) => a.name.localeCompare(b.name))),
+    addFamily: (name) =>
+      commit(() => {
+        const f: Family = { id: uid(), name: name.trim(), createdBy: me().id, createdAt: now() }
+        db.families.push(f)
+        return structuredClone(f)
+      }),
+    renameFamily: (id, name) =>
+      change(() => {
+        requireAdmin()
+        db.families.find((f) => f.id === id)!.name = name.trim()
+      }),
+    deleteFamily: (id) =>
+      change(() => {
+        requireAdmin()
+        db.families = db.families.filter((f) => f.id !== id)
       }),
 
     getSettings: () => ok(db.settings),
@@ -275,7 +302,7 @@ export function createLocalApi(): Api {
     bumpReservation: (id, byReservationId) =>
       change(() => {
         const r = db.reservations.find((x) => x.id === id)!
-        if (priorityUserFor(stayYear(r), db.settings) !== me().id) throw new Error('Only the priority user can do this')
+        if (priorityFamilyFor(stayYear(r), db.settings) !== me().familyId) throw new Error('Only the priority family can do this')
         Object.assign(r, { status: 'tentative', bumpedBy: byReservationId })
       }),
     confirmReservation: (id) =>

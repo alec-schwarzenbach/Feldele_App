@@ -6,6 +6,7 @@ import { Board, PostDetail, PostForm } from './pages/Board'
 import { Car, CarForm } from './pages/Car'
 import { CatchForm, Fishing } from './pages/Fishing'
 import { Home } from './pages/Home'
+import { ChooseFamily } from './pages/ChooseFamily'
 import { Login, Pending } from './pages/Login'
 import { Profile } from './pages/Profile'
 import { Report } from './pages/Report'
@@ -18,6 +19,7 @@ export default function App() {
 
   if (!authReady) return <div className="splash">🏕️</div>
   if (!user) return <div className="shell"><Login /></div>
+  if (!user.familyId) return <div className="shell"><ChooseFamily /></div>
   if (user.role === 'pending') return <div className="shell"><Pending name={user.name} /></div>
   if (!data) return <div className="splash">🏕️</div>
 

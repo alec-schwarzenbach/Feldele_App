@@ -4,6 +4,7 @@ import type {
   Catch,
   Comment,
   CostEntry,
+  Family,
   Post,
   Profile,
   Reservation,
@@ -30,7 +31,13 @@ export interface Api {
   signOut(): Promise<void>
 
   listProfiles(): Promise<Profile[]>
-  updateProfile(id: string, patch: Partial<Pick<Profile, 'name' | 'family' | 'role'>>): Promise<void>
+  updateProfile(id: string, patch: Partial<Pick<Profile, 'name' | 'familyId' | 'role'>>): Promise<void>
+
+  /** Readable by everyone who is signed in, including people waiting for approval. */
+  listFamilies(): Promise<Family[]>
+  addFamily(name: string): Promise<Family>
+  renameFamily(id: string, name: string): Promise<void>
+  deleteFamily(id: string): Promise<void>
 
   getSettings(): Promise<Settings>
   updateSettings(patch: Partial<Settings>): Promise<void>

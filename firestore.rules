@@ -5,7 +5,8 @@ rules_version = '2';
 //  - admin:      everything except roles; the only ones who see costs
 //  - member:     stays, car, fishing, board
 //  - car_keeper: same as member; receives the car notifications
-//  - pending:    new sign-up, can only read their own profile until approved
+//  - pending:    new sign-up, can only read their own profile and the families until approved
+//  Every profile belongs to a family (familyId); priority and costs are per family.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -21,6 +22,8 @@ service cloud.firestore {
     function createsMine() { return request.resource.data.userId == request.auth.uid; }
     function changes() { return request.resource.data.diff(resource.data).affectedKeys(); }
 
+    function familyExists(id) { return id is string && exists(/databases/$(database)/documents/families/$(id)); }
+
     // ── Profiles ──
     match /profiles/{uid} {
       allow read: if approved() || (signedIn() && request.auth.uid == uid);
@@ -29,14 +32,30 @@ service cloud.firestore {
         && request.resource.data.role == 'pending'
         && request.resource.data.email == request.auth.token.email;
       allow update: if
-        // your own name / family
-        (approved() && request.auth.uid == uid && changes().hasOnly(['name', 'family']))
-        // admins can fix names
-        || (admin() && changes().hasOnly(['name', 'family']))
+        // your own name
+        (approved() && request.auth.uid == uid && changes().hasOnly(['name']))
+        // choose your family once, right after signing up (also while waiting for approval)
+        || (signedIn() && request.auth.uid == uid && !('familyId' in resource.data)
+            && changes().hasOnly(['familyId']) && familyExists(request.resource.data.familyId))
+        // admins fix names and move people between families
+        || (admin() && changes().hasOnly(['name', 'familyId'])
+            && (!('familyId' in request.resource.data) || familyExists(request.resource.data.familyId)))
         // only the owner hands out roles, and never the owner role itself
         || (owner() && uid != request.auth.uid && resource.data.role != 'owner'
             && request.resource.data.role in ['pending', 'member', 'admin', 'car_keeper']
             && changes().hasOnly(['role']));
+    }
+
+    // ── Families: share priority and pay together ──
+    // Readable while waiting for approval, so new members can pick theirs.
+    // Anyone signed in can add one; only admins rename or delete.
+    match /families/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.name is string
+        && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if admin() && changes().hasOnly(['name']);
+      allow delete: if admin();
     }
 
     // ── Settings & rooms: everyone reads, admins edit; only the owner sets the priority order ──
@@ -61,14 +80,14 @@ service cloud.firestore {
       return d.start is string && d.end is string && d.end > d.start
         && d.people is int && d.people > 0 && d.roomIds is list;
     }
-    // Does the signed-in user have priority in the year this stay starts?
-    // Same rotation as the app: priorityOrder[0] in priorityStartYear, then the next, repeating.
+    // Does the signed-in user's family have priority in the year this stay starts?
+    // Same rotation as the app: priorityOrder[0] (a family id) in priorityStartYear, then the next, repeating.
     function hasPriority(start) {
       let s = get(/databases/$(database)/documents/settings/main).data;
       let order = s.get('priorityOrder', []);
       let n = order.size();
       let offset = int(start.split('-')[0]) - s.get('priorityStartYear', 0);
-      return n > 0 && order[((offset % n) + n) % n] == request.auth.uid;
+      return n > 0 && order[((offset % n) + n) % n] == me().get('familyId', '');
     }
     // Today as YYYY-MM-DD (UTC), to compare with day strings.
     function todayDay() {
@@ -89,7 +108,7 @@ service cloud.firestore {
       allow read: if approved();
       allow create: if approved() && createsMine() && validStay(request.resource.data)
         && request.resource.data.status in ['active', 'tentative']
-        // only the year's priority user can take over other people's dates
+        // only members of the year's priority family can take over other people's dates
         && (request.resource.data.get('priorityClaim', false) == false || hasPriority(request.resource.data.start));
       allow update: if admin()
         // edit your own open stay (dates, people, rooms, notes)
@@ -100,7 +119,7 @@ service cloud.firestore {
             && request.resource.data.status == 'cancelled'
             && changes().hasOnly(['status', 'lateCancel', 'cancelledAt'])
             && (request.resource.data.lateCancel == true || !claimExpired(resource.data)))
-        // the priority user moves someone else's stay to "maybe"
+        // a member of the priority family moves another family's stay to "maybe"
         || (approved() && !mine() && resource.data.status == 'active'
             && request.resource.data.status == 'tentative'
             && changes().hasOnly(['status', 'bumpedBy']) && hasPriority(resource.data.start))

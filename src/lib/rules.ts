@@ -1,5 +1,5 @@
 import { addDays, addMonths, nightsBetween, nightsInYear, overlaps, today } from './dates'
-import type { CarBooking, CostEntry, Profile, Reservation, Room, Settings } from './types'
+import type { CarBooking, CostEntry, Family, Profile, Reservation, Room, Settings } from './types'
 
 /** Days a priority user has to cancel for free after taking over someone else's dates. */
 export const CLAIM_FREE_DAYS = 28
@@ -9,8 +9,8 @@ export function freeCancelDeadline(r: Pick<Reservation, 'start'>, settings: Sett
   return addMonths(r.start, -settings.freeCancelMonths)
 }
 
-/** Who has priority in a year: the rotation order repeats once everyone had their turn. */
-export function priorityUserFor(year: number, settings: Settings): string | undefined {
+/** Which family has priority in a year: the rotation repeats once every family had its turn. */
+export function priorityFamilyFor(year: number, settings: Settings): string | undefined {
   const order = settings.priorityOrder
   if (!order.length) return undefined
   const n = order.length
@@ -18,6 +18,8 @@ export function priorityUserFor(year: number, settings: Settings): string | unde
 }
 
 export const stayYear = (r: Pick<Reservation, 'start'>) => Number(r.start.slice(0, 4))
+
+const familyOf = (userId: string, profiles: Profile[]) => profiles.find((p) => p.id === userId)?.familyId
 
 /** Reservations with the given statuses that share a room with the draft in the same period. */
 export function roomConflicts(
@@ -41,7 +43,7 @@ export function waitingFor(r: Reservation, all: Reservation[]): Reservation[] {
 
 export type BookingPlan =
   | { kind: 'free' }
-  /** Priority user takes the dates; the others become "maybe" */
+  /** Priority family takes the dates; other families' stays become "maybe" */
   | { kind: 'claim'; bump: Reservation[] }
   /** Someone else has the rooms: book as "maybe" */
   | { kind: 'maybe'; blockers: Reservation[] }
@@ -53,12 +55,16 @@ export function planBooking(
   all: Reservation[],
   settings: Settings,
   userId: string,
+  profiles: Profile[],
 ): BookingPlan {
   const conflicts = roomConflicts(all, draft)
   if (!conflicts.length) return { kind: 'free' }
   const own = conflicts.filter((r) => r.userId === userId)
   if (own.length) return { kind: 'own', conflicts: own }
-  if (priorityUserFor(stayYear(draft), settings) === userId) return { kind: 'claim', bump: conflicts }
+  // Priority only works against other families, never inside your own family.
+  const myFamily = familyOf(userId, profiles)
+  const sameFamily = conflicts.some((r) => familyOf(r.userId, profiles) === myFamily)
+  if (myFamily && !sameFamily && priorityFamilyFor(stayYear(draft), settings) === myFamily) return { kind: 'claim', bump: conflicts }
   return { kind: 'maybe', blockers: conflicts }
 }
 
@@ -124,22 +130,35 @@ export interface MemberStats {
   owed: number
 }
 
+/** A family pays together: the sum of its members' person-nights. */
+export interface FamilyStats {
+  family: Family | undefined
+  members: MemberStats[]
+  nights: number
+  personNights: number
+  share: number
+  owed: number
+}
+
 export interface YearReport {
   year: number
   totalCosts: number
   costsByCategory: Record<string, number>
   totalPersonNights: number
   rows: MemberStats[]
+  families: FamilyStats[]
 }
 
 /**
  * Costs are split by person-nights: every person (member + guests) staying one
- * night counts as 1. Late-cancelled stays still count, as if they had been used.
+ * night counts as 1. Each family pays the share of its members' person-nights.
+ * Late-cancelled stays still count, as if they had been used.
  * Only past nights count — future reservations would distort the bill.
  */
 export function buildYearReport(
   year: number,
   users: Profile[],
+  families: Family[],
   reservations: Reservation[],
   costs: CostEntry[],
   upTo = today(),
@@ -183,22 +202,37 @@ export function buildYearReport(
   }
   rows.sort((a, b) => b.personNights - a.personNights)
 
-  return { year, totalCosts, costsByCategory, totalPersonNights, rows }
+  const byFamily = new Map<string, FamilyStats>()
+  for (const row of rows) {
+    const key = row.user.familyId ?? ''
+    const f = byFamily.get(key) ?? {
+      family: families.find((x) => x.id === key), members: [], nights: 0, personNights: 0, share: 0, owed: 0,
+    }
+    f.members.push(row)
+    f.nights += row.nights
+    f.personNights += row.personNights
+    f.share += row.share
+    f.owed += row.owed
+    byFamily.set(key, f)
+  }
+  const familyStats = [...byFamily.values()].sort((a, b) => b.personNights - a.personNights)
+
+  return { year, totalCosts, costsByCategory, totalPersonNights, rows, families: familyStats }
 }
 
+export const familyLabel = (f: Family | undefined) => f?.name ?? 'No family chosen'
+
 export function reportToCsv(report: YearReport, currency: string): string {
-  const header = ['Member', 'Stays', 'Nights', 'Person-nights', 'of which late cancellations', 'Parties hosted', 'Share %', `Owed (${currency})`]
-  const lines = report.rows.map((r) => [
-    r.user.name,
-    r.stays,
-    r.nights,
-    r.personNights,
-    r.lateCancelPersonNights,
-    r.hosted,
-    (r.share * 100).toFixed(1),
-    r.owed.toFixed(2),
-  ])
-  lines.push(['Total', '', '', report.totalPersonNights, '', '', '100', report.totalCosts.toFixed(2)])
+  const header = ['Family', 'Member', 'Stays', 'Nights', 'Person-nights', 'of which late cancellations', 'Parties hosted', 'Share %', `Owed (${currency})`]
+  const lines: unknown[][] = []
+  for (const f of report.families) {
+    lines.push([familyLabel(f.family), '(family total)', '', f.nights, f.personNights, '', '', (f.share * 100).toFixed(1), f.owed.toFixed(2)])
+    for (const r of f.members) {
+      lines.push([familyLabel(f.family), r.user.name, r.stays, r.nights, r.personNights, r.lateCancelPersonNights, r.hosted,
+        (r.share * 100).toFixed(1), r.owed.toFixed(2)])
+    }
+  }
+  lines.push(['Total', '', '', '', report.totalPersonNights, '', '', '100', report.totalCosts.toFixed(2)])
   const esc = (v: unknown) => {
     const s = String(v)
     return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s

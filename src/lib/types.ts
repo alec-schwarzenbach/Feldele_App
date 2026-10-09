@@ -9,7 +9,16 @@ export interface Profile {
   name: string
   email: string
   role: Role
-  family?: string
+  /** The family this person belongs to. Chosen right after sign-up; required to use the app. */
+  familyId?: string
+}
+
+/** Families share priority and pay together. Any member can add one. */
+export interface Family {
+  id: string
+  name: string
+  createdBy?: string
+  createdAt?: string
 }
 
 export interface Room {
@@ -130,9 +139,7 @@ export interface Settings {
   lodgeName: string
   lodgeLat: number
   lodgeLng: number
-  /** Families the members can belong to (chosen on their profile) */
-  families: string[]
-  /** Priority rotation: priorityOrder[0] has priority in priorityStartYear, the next one the year after, and so on (repeating). */
+  /** Priority rotation of family ids: priorityOrder[0] has priority in priorityStartYear, the next family the year after, and so on (repeating). */
   priorityOrder: string[]
   priorityStartYear: number
 }

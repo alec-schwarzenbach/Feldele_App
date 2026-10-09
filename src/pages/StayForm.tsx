@@ -3,12 +3,12 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Header } from '../components/ui'
 import { api } from '../lib/api'
 import { addDays, formatDay, formatRange, nightsBetween, today } from '../lib/dates'
-import { carConflicts, carOwnerName, claimDeadlineFrom, CLAIM_FREE_DAYS, freeCancelDeadline, planBooking, priorityUserFor, roomConflicts, roomsByArea } from '../lib/rules'
+import { carConflicts, carOwnerName, claimDeadlineFrom, CLAIM_FREE_DAYS, freeCancelDeadline, planBooking, priorityFamilyFor, roomConflicts, roomsByArea } from '../lib/rules'
 import { useData } from '../lib/store'
 
 export function StayForm() {
   const { id } = useParams()
-  const { user, data, mutate, name } = useData()
+  const { user, data, mutate, name, familyName } = useData()
   const nav = useNavigate()
   const existing = id ? data.reservations.find((r) => r.id === id) : undefined
 
@@ -26,11 +26,11 @@ export function StayForm() {
   const nights = nightsBetween(start, end)
   const validDates = end > start
   const draft = { id, start, end, roomIds }
-  const plan = validDates && roomIds.length ? planBooking(draft, data.reservations, data.settings, existing?.userId ?? user.id) : { kind: 'free' as const }
+  const plan = validDates && roomIds.length ? planBooking(draft, data.reservations, data.settings, existing?.userId ?? user.id, data.profiles) : { kind: 'free' as const }
   // Editing a confirmed stay can't take over other rooms; a "maybe" stay stays "maybe".
   const blocked = plan.kind === 'own' || (existing?.status === 'active' && plan.kind !== 'free')
   const conflicts = validDates ? roomConflicts(data.reservations, draft) : []
-  const priorityId = priorityUserFor(Number(start.slice(0, 4)), data.settings)
+  const priorityId = priorityFamilyFor(Number(start.slice(0, 4)), data.settings)
   const takenRoom = (roomId: string) =>
     validDates && roomConflicts(data.reservations, { id, start, end, roomIds: [roomId] }).length > 0
   const beds = roomIds.reduce((s, rid) => s + (data.rooms.find((r) => r.id === rid)?.beds ?? 0), 0)
@@ -49,7 +49,7 @@ export function StayForm() {
     if (roomIds.length === 0) return alert('Pick at least one room.')
     if (blocked) return alert('Some of these rooms are already booked in this period.')
     if (!existing && plan.kind === 'claim' && !confirm(
-      `You have priority in ${start.slice(0, 4)}. ${[...new Set(plan.bump.map((b) => name(b.userId)))].join(', ')} ` +
+      `Your family has priority in ${start.slice(0, 4)}. ${[...new Set(plan.bump.map((b) => name(b.userId)))].join(', ')} ` +
       `will be moved to "maybe" and notified.\n\nYou can cancel for free for ${CLAIM_FREE_DAYS / 7} weeks; after that you pay even if you don't go. Continue?`,
     )) return
     setSaving(true)
@@ -68,7 +68,7 @@ export function StayForm() {
         for (const b of plan.bump) {
           await api.bumpReservation(b.id, r.id)
           await api.notifyStay(b.userId, 'Your stay is now "maybe"',
-            `${user.name} has priority in ${start.slice(0, 4)} and booked ${formatRange(start, end)}. ` +
+            `${user.name} (family ${familyName(user.familyId)}) has priority in ${start.slice(0, 4)} and booked ${formatRange(start, end)}. ` +
             `Your stay ${formatRange(b.start, b.end)} is now "maybe" – it becomes confirmed again if ${user.name} cancels.`)
         }
       }
@@ -134,14 +134,14 @@ export function StayForm() {
 
         {!existing && plan.kind === 'claim' && (
           <p className="info small">
-            ⭐ <strong>You have priority in {start.slice(0, 4)}.</strong> Booking moves the stays above to "maybe".
+            ⭐ <strong>Your family has priority in {start.slice(0, 4)}.</strong> Booking moves the stays above to "maybe".
             You then have {CLAIM_FREE_DAYS / 7} weeks to cancel for free – after that you pay even if you don't go.
           </p>
         )}
         {!existing && plan.kind === 'maybe' && (
           <p className="info small warn-text">
             These rooms are taken, so your stay will be <strong>"maybe"</strong>. It becomes confirmed automatically if the
-            other stay is cancelled. {priorityId && `(${name(priorityId)} has priority in ${start.slice(0, 4)}.)`}
+            other stay is cancelled. {priorityId && `(Family ${familyName(priorityId)} has priority in ${start.slice(0, 4)}.)`}
           </p>
         )}
 

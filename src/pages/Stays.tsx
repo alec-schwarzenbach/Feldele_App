@@ -4,22 +4,22 @@ import { MonthCalendar } from '../components/MonthCalendar'
 import { Avatar, Empty, Fab, Header, Segmented } from '../components/ui'
 import { colorFor } from '../lib/colors'
 import { formatDay, formatRange, today } from '../lib/dates'
-import { priorityUserFor, roomLabel, stayNights } from '../lib/rules'
+import { priorityFamilyFor, roomLabel, stayNights } from '../lib/rules'
 import { useData } from '../lib/store'
 import type { Reservation } from '../lib/types'
 
 type View = 'upcoming' | 'mine' | 'past'
 
 export function Stays() {
-  const { user, data, name } = useData()
+  const { user, data, name, familyName } = useData()
   const [view, setView] = useState<View>('upcoming')
   const [day, setDay] = useState<string>()
   const t = today()
   const active = data.reservations.filter((r) => r.status === 'active')
   // The list also shows "maybe" stays; the calendar only confirmed ones.
   const open = data.reservations.filter((r) => r.status !== 'cancelled')
-  const priorityId = priorityUserFor(Number(t.slice(0, 4)), data.settings)
-  const nextPriorityId = priorityUserFor(Number(t.slice(0, 4)) + 1, data.settings)
+  const priorityId = priorityFamilyFor(Number(t.slice(0, 4)), data.settings)
+  const nextPriorityId = priorityFamilyFor(Number(t.slice(0, 4)) + 1, data.settings)
 
   let list: Reservation[]
   if (day) list = open.filter((r) => r.start <= day && day < r.end)
@@ -36,8 +36,8 @@ export function Stays() {
       <div className="page">
         {priorityId && (
           <p className="info small">
-            ⭐ Priority {t.slice(0, 4)}: <strong>{name(priorityId)}</strong>
-            {nextPriorityId && <> · {Number(t.slice(0, 4)) + 1}: <strong>{name(nextPriorityId)}</strong></>}
+            ⭐ Priority {t.slice(0, 4)}: <strong>{familyName(priorityId)}</strong>
+            {nextPriorityId && <> · {Number(t.slice(0, 4)) + 1}: <strong>{familyName(nextPriorityId)}</strong></>}
           </p>
         )}
         <MonthCalendar

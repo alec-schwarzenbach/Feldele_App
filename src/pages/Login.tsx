@@ -45,6 +45,7 @@ export function Login() {
         <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" /></label>
         <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={4}
           autoComplete={mode === 'in' ? 'current-password' : 'new-password'} /></label>
+        {mode === 'up' && <p className="small muted">Next you'll choose your family (or add it).</p>}
         {error && <p className="error">{error}</p>}
         <button className="btn primary" disabled={busy}>{mode === 'in' ? 'Sign in' : 'Create account'}</button>
         <button type="button" className="btn ghost" onClick={() => setMode(mode === 'in' ? 'up' : 'in')}>

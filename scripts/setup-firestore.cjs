@@ -14,7 +14,7 @@ const now = new Date().toISOString()
 
 const SETTINGS = {
   freeCancelMonths: 4, currency: 'EUR', lodgeName: 'Feldele', lodgeLat: 47.505, lodgeLng: 14.0,
-  families: [], priorityOrder: [], priorityStartYear: new Date().getFullYear(),
+  priorityOrder: [], priorityStartYear: new Date().getFullYear(),
 }
 
 const ROOMS = [
@@ -31,9 +31,13 @@ const ROOMS = [
 ]
 
 const EXAMPLES = {
+  families: {
+    _about: 'A family. Members choose (or add) their family after signing up. Priority (settings/main.priorityOrder lists family ids) and costs are per family.',
+    name: 'Example family', createdBy: '(profile id)', createdAt: now,
+  },
   profiles: {
-    _about: 'One document per login; the document id is the Firebase Auth user id. role: owner | admin | member | car_keeper (car owner) | pending. family: one of settings/main.families, chosen by the member. New sign-ups are pending until the owner approves them.',
-    name: 'Example Person', email: 'example@example.com', role: 'member', family: 'Example family', createdAt: now,
+    _about: 'One document per login; the document id is the Firebase Auth user id. role: owner | admin | member | car_keeper (car owner) | pending. familyId: the family (see families), chosen right after sign-up. New sign-ups are pending until the owner approves them.',
+    name: 'Example Person', email: 'example@example.com', role: 'member', familyId: '(family id)', createdAt: now,
   },
   reservations: {
     _about: 'A stay. start = arrival day, end = departure day (YYYY-MM-DD, end not counted as a night). people includes the member. status: active | tentative ("maybe": rooms taken, waiting) | cancelled. priorityClaim = booked by the priority user of that year over someone else; free to cancel until claimDeadline (4 weeks), then binding. bumpedBy = for a "maybe" stay, the stay that pushed it out. lateCancel = cancelled when it already cost something, still counts in the cost split.',

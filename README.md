@@ -20,13 +20,13 @@ With no Firebase config the app runs in **demo mode**. Data is stored only in th
 | Area | What it does |
 |---|---|
 | **Stays** | Book arrival/departure, number of people, rooms and an optional party/occasion. If the rooms are taken, you can book as **"maybe"**, which becomes confirmed automatically if the other stay is cancelled. |
-| **Yearly priority** | The owner sets a rotation of members (repeats after the last). The priority user can take over dates someone else booked; that stay becomes "maybe". The priority user then has 4 weeks to cancel for free, after that it is binding. |
+| **Yearly priority** | The owner sets a rotation of families (repeats after the last). Every member of the priority family can take over dates another family booked; that stay becomes "maybe". They then have 4 weeks to cancel for free, after that it is binding. |
 | **Cancelling** | Free unless someone else is affected: if someone is waiting ("maybe") for your rooms, it is free until 4 months before arrival, after that it counts toward your costs. "Maybe" stays are always free to cancel. |
 | **Car** | Calendar of car bookings, tied to a stay or on their own. Every booking notifies the car owner, Günter Kobalt, and nobody else. |
 | **Fishing** | Map of catches with species, length, weight, reason (starving / injured), bait, photo and date. Live GPS: the pin follows your position, or tap the map to set it by hand. |
 | **Board** | Tips, trips, reviews and restaurants with star ratings, photos and comments. Authors can edit and delete their own posts. |
-| **Costs & usage (admins only)** | For each year: stays, nights, person-nights, parties hosted, share % and amount owed per member. Costs are split by person-nights (1 person × 1 night = 1). Download as CSV for Excel or Google Sheets. |
-| **Families** | Admins keep the list of families; every member picks theirs on their profile. The cost report also shows totals per family. |
+| **Costs & usage (admins only)** | For each year: what each family owes, with every member's stays, nights and person-nights. Costs are split by person-nights (1 person × 1 night = 1). Download as CSV for Excel or Google Sheets. |
+| **Families** | Right after signing up, everyone must choose their family (or add it if it is missing) before they can use the app. Priority and costs are per family. Admins can rename families and move members between them. |
 | **Settings (admin)** | Rooms, house name and location, free-cancellation months, currency. |
 
 ### Who sees what

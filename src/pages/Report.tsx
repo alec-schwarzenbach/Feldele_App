@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Header, Icon } from '../components/ui'
 import { api } from '../lib/api'
 import { today } from '../lib/dates'
-import { buildYearReport, reportToCsv } from '../lib/rules'
+import { buildYearReport, familyLabel, reportToCsv } from '../lib/rules'
 import { useData } from '../lib/store'
 import type { CostCategory } from '../lib/types'
 
@@ -17,21 +17,11 @@ export function Report() {
     .filter((y) => y <= thisYear)
     .sort((a, b) => b - a)
   const [year, setYear] = useState(thisYear)
-  const report = buildYearReport(year, data.profiles, data.reservations, data.costs)
+  const report = buildYearReport(year, data.profiles, data.families, data.reservations, data.costs)
   const cur = data.settings.currency
   const money = (n: number) => n.toLocaleString(undefined, { style: 'currency', currency: cur, maximumFractionDigits: 0 })
   const money2 = (n: number) => n.toLocaleString(undefined, { style: 'currency', currency: cur })
-  const maxPn = Math.max(1, ...report.rows.map((r) => r.personNights))
-  const byFamily = Object.values(
-    report.rows.reduce<Record<string, { family: string; members: string[]; personNights: number; owed: number }>>((acc, r) => {
-      const family = r.user.family || 'No family chosen'
-      acc[family] ??= { family, members: [], personNights: 0, owed: 0 }
-      acc[family].members.push(r.user.name)
-      acc[family].personNights += r.personNights
-      acc[family].owed += r.owed
-      return acc
-    }, {}),
-  ).sort((a, b) => b.owed - a.owed)
+  const maxPn = Math.max(1, ...report.families.map((f) => f.personNights))
 
   function download() {
     const csv = reportToCsv(report, cur)
@@ -57,9 +47,9 @@ export function Report() {
         <section className="card">
           <h2>How the split works</h2>
           <p className="small muted">
-            Every person staying one night = 1 person-night. Each member pays the share of the year's costs
-            matching their person-nights (incl. their guests). Stays cancelled after the free period still count.
-            Only nights up to today are counted.
+            Every person staying one night = 1 person-night. Each family pays the share of the year's costs
+            matching its members' person-nights (incl. their guests). Stays cancelled when it already cost something
+            still count. Only nights up to today are counted.
           </p>
         </section>
 
@@ -68,18 +58,25 @@ export function Report() {
             <h2>Who pays what – {year}</h2>
             <button className="btn small ghost" onClick={download}><Icon name="download" size={16} /> CSV</button>
           </div>
-          {report.rows.map((r) => (
-            <div key={r.user.id} className="split-row">
+          {report.families.map((f) => (
+            <div key={f.family?.id ?? 'none'} className="split-row">
               <div className="row-head">
-                <strong>{r.user.name}</strong>
-                <strong>{money(r.owed)}</strong>
+                <strong>👨‍👩‍👧 {familyLabel(f.family)}</strong>
+                <strong>{money(f.owed)}</strong>
               </div>
-              <div className="bar"><i style={{ width: `${(r.personNights / maxPn) * 100}%` }} /></div>
-              <p className="small muted">
-                {r.stays} stay{r.stays === 1 ? "" : "s"} · {r.nights} nights · {r.personNights} person-nights · {(r.share * 100).toFixed(1)}%
-                {r.hosted > 0 && ` · 🎉 ${r.hosted} hosted`}
-                {r.lateCancelPersonNights > 0 && ` · ${r.lateCancelPersonNights} from late cancels`}
-              </p>
+              <div className="bar"><i style={{ width: `${(f.personNights / maxPn) * 100}%` }} /></div>
+              <p className="small muted">{f.nights} nights · {f.personNights} person-nights · {(f.share * 100).toFixed(1)}%</p>
+              {f.members.map((r) => (
+                <p key={r.user.id} className="small member-line">
+                  <span>{r.user.name}</span>
+                  <span className="muted">
+                    {r.stays} stay{r.stays === 1 ? '' : 's'} · {r.personNights} p-n
+                    {r.hosted > 0 && ` · 🎉 ${r.hosted}`}
+                    {r.lateCancelPersonNights > 0 && ` · ${r.lateCancelPersonNights} late cancel`}
+                    {' · '}{money(r.owed)}
+                  </span>
+                </p>
+              ))}
             </div>
           ))}
           <div className="row-head total">
@@ -93,18 +90,6 @@ export function Report() {
             </div>
           )}
         </section>
-
-        {byFamily.length > 1 && (
-          <section className="card">
-            <h2>By family – {year}</h2>
-            {byFamily.map((f) => (
-              <div key={f.family} className="row-head cost-row">
-                <span>{f.family} <span className="muted small">· {f.members.join(', ')} · {f.personNights} person-nights</span></span>
-                <strong>{money(f.owed)}</strong>
-              </div>
-            ))}
-          </section>
-        )}
 
         <section className="card">
           <h2>Costs {year}</h2>

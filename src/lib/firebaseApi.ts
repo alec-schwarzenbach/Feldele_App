@@ -26,7 +26,7 @@ import {
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage'
 import type { Api } from './api'
 import { formatDay } from './dates'
-import type { AppNotification, CarBooking, Post, Profile, Reservation, Room, Settings } from './types'
+import type { AppNotification, CarBooking, Family, Post, Profile, Reservation, Room, Settings } from './types'
 import { isAdmin } from './types'
 
 // Real backend on Firebase. Documents store the same camelCase fields as the
@@ -43,7 +43,7 @@ export interface FirebaseConfig {
 
 const DEFAULT_SETTINGS: Settings = {
   freeCancelMonths: 4, currency: 'EUR', lodgeName: 'Feldele', lodgeLat: 47.505, lodgeLng: 14.0,
-  families: [], priorityOrder: [], priorityStartYear: new Date().getFullYear(),
+  priorityOrder: [], priorityStartYear: new Date().getFullYear(),
 }
 
 const now = () => new Date().toISOString()
@@ -118,6 +118,15 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
 
     listProfiles: () => list('profiles'),
     updateProfile: (id, p) => update('profiles', id, p),
+
+    listFamilies: async () => (await list<Family>('families')).sort((a, b) => a.name.localeCompare(b.name)),
+    async addFamily(name) {
+      const full = { name: name.trim(), createdBy: myId(), createdAt: now() }
+      const created = await addDoc(col('families'), full)
+      return { ...full, id: created.id }
+    },
+    renameFamily: (id, name) => update('families', id, { name: name.trim() }),
+    deleteFamily: (id) => remove('families', id),
 
     async getSettings() {
       const snap = await getDoc(doc(db, 'settings', 'main'))
