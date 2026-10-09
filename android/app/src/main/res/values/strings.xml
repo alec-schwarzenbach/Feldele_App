@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Feldele</string>
+    <string name="title_activity_main">Feldele</string>
+    <string name="package_name">com.feldele.feldele</string>
+    <string name="custom_url_scheme">com.feldele.feldele</string>
+</resources>

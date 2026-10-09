@@ -8,9 +8,15 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "setup:firestore": "node scripts/setup-firestore.cjs"
+    "setup:firestore": "node scripts/setup-firestore.cjs",
+    "app:sync": "npm run build && npx cap sync",
+    "app:android": "npx cap open android",
+    "app:ios": "npx cap open ios"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3",
     "firebase": "^13.0.0",
     "leaflet": "^1.9.4",
     "react": "^19.2.8",
@@ -19,6 +25,8 @@
     "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.5.3",
     "@types/leaflet": "^1.9.22",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",

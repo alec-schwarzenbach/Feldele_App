@@ -1,7 +1,10 @@
 import { initializeApp } from 'firebase/app'
+import { Capacitor } from '@capacitor/core'
 import {
   createUserWithEmailAndPassword,
   getAuth,
+  indexedDBLocalPersistence,
+  initializeAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
@@ -64,7 +67,8 @@ function patchOf(obj: object): DocumentData {
 
 export function createFirebaseApi(config: FirebaseConfig): Api {
   const app = initializeApp(config)
-  const auth = getAuth(app)
+  // Inside the iOS/Android app, skip the browser-only sign-in helpers (they can hang in a WebView).
+  const auth = Capacitor.isNativePlatform() ? initializeAuth(app, { persistence: indexedDBLocalPersistence }) : getAuth(app)
   const db = initializeFirestore(app, { ignoreUndefinedProperties: true })
   const storage = getStorage(app)
   const col = (name: string) => collection(db, name)

@@ -54,9 +54,33 @@ Firebase project: `feldele`.
    ```
    (Or paste `firestore.rules` and `storage.rules` into the Rules tabs in the console.)
 6. Restart `npm run dev` and create your account in the app. Then in **Firestore → profiles → (your document)** change `role` from `pending` to `owner`. After that you approve everyone else in the app.
-7. Hosting (Vercel): add the same `VITE_FIREBASE_*` variables in the Vercel project settings, and add the Vercel domain under **Authentication → Settings → Authorized domains**.
+7. Publish the website (Firebase Hosting, https://feldele.web.app):
+   ```bash
+   npm run build
+   npx firebase-tools deploy --only hosting
+   ```
 
-$1
+## Phone apps (Android & iOS)
+
+The same app is wrapped with [Capacitor](https://capacitorjs.com) into native apps (`android/`, `ios/`). App ID on both: `com.feldele.feldele`.
+
+After changing the web code, copy it into both apps:
+
+```bash
+npm run app:sync
+```
+
+- **Android** (works on Windows): install [Android Studio](https://developer.android.com/studio), then run `npm run app:android`. In Android Studio press ▶ to run on a connected phone, or use **Build → Generate Signed App Bundle / APK** for the Play Store.
+- **iOS** needs a Mac with Xcode (or a cloud build service such as Codemagic): run `npm run app:ios`, choose your team under *Signing & Capabilities*, then run it or archive it for TestFlight.
+
+The native Firebase config files are not in git. If they are missing, download them from the Firebase console (Project settings → Your apps) into:
+
+- `android/app/google-services.json`
+- `ios/App/App/GoogleService-Info.plist`
+
+Icons and splash screens come from `assets/`. Regenerate them with `npx capacitor-assets generate`.
+
+## Code map
 
 - `src/lib/api.ts`: backend interface. `localApi.ts` is the demo backend and `firebaseApi.ts` the real one.
 - `src/lib/rules.ts`: cancellation rule, room and car clashes, cost split (`buildYearReport`).
