@@ -36,3 +36,7 @@ google-services.json
 
 # Native Firebase config (download again from the Firebase console if missing)
 GoogleService-Info.plist
+
+# Built app files
+*.apk
+*.aab
