@@ -270,3 +270,12 @@ legend { font-size: 0.85rem; font-weight: 600; color: var(--muted); padding: 0 4
 .member-line { display: flex; justify-content: space-between; gap: 8px; padding-left: 12px; border-left: 2px solid var(--line); }
 .member-row { display: flex; flex-direction: column; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .member-row .family-select { padding: 6px 10px; font-size: 14px; }
+.shop-item { display: flex; flex-direction: row; align-items: center; gap: 12px; color: var(--text); font-weight: 400; font-size: 1rem; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.shop-item:last-child { border-bottom: 0; }
+.shop-item input[type=checkbox] { width: 22px; height: 22px; flex-shrink: 0; }
+.shop-item.done .grow { text-decoration: line-through; color: var(--muted); }
+.push-status { display: flex; align-items: center; gap: 12px; }
+.assign-row { flex-direction: row; align-items: center; gap: 10px; color: var(--text); font-weight: 500; padding: 4px 0; }
+.assign-row select { width: auto; max-width: 60%; }
+.family-block { display: flex; flex-direction: column; gap: 2px; }
+.member-line.indent { padding-left: 24px; }

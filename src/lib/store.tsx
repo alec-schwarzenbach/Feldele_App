@@ -4,6 +4,7 @@ import type {
   AppNotification,
   CarBooking,
   Catch,
+  Clan,
   Comment,
   CostEntry,
   Family,
@@ -12,6 +13,7 @@ import type {
   Reservation,
   Room,
   Settings,
+  ShoppingItem,
 } from './types'
 
 // The group is small, so we simply load everything once after login and
@@ -20,6 +22,7 @@ import type {
 export interface Data {
   profiles: Profile[]
   families: Family[]
+  clans: Clan[]
   settings: Settings
   rooms: Room[]
   reservations: Reservation[]
@@ -28,6 +31,7 @@ export interface Data {
   catches: Catch[]
   posts: Post[]
   comments: Comment[]
+  shopping: ShoppingItem[]
   costs: CostEntry[]
 }
 
@@ -48,10 +52,11 @@ interface Store {
 const Ctx = createContext<Store | null>(null)
 
 async function loadAll(): Promise<Data> {
-  const [profiles, families, settings, rooms, reservations, carBookings, notifications, catches, posts, comments, costs] =
+  const [profiles, families, clans, settings, rooms, reservations, carBookings, notifications, catches, posts, comments, shopping, costs] =
     await Promise.all([
       api.listProfiles(),
       api.listFamilies(),
+      api.listClans(),
       api.getSettings(),
       api.listRooms(),
       api.listReservations(),
@@ -60,9 +65,10 @@ async function loadAll(): Promise<Data> {
       api.listCatches(),
       api.listPosts(),
       api.listComments(),
+      api.listShopping(),
       api.listCosts(),
     ])
-  return { profiles, families, settings, rooms, reservations, carBookings, notifications, catches, posts, comments, costs }
+  return { profiles, families, clans, settings, rooms, reservations, carBookings, notifications, catches, posts, comments, shopping, costs }
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -84,7 +90,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // People without a family, or waiting for approval, can't read the data yet.
-    if (user && user.familyId && user.role !== 'pending') reload().catch((e) => alert(e.message))
+    if (user && user.familyId && user.role !== 'pending') {
+      reload().catch((e) => alert(e.message))
+      // Keep this device's push registration fresh (no prompt; that needs a button tap).
+      api.enablePush(false).catch(() => {})
+    }
     else setData(null)
   }, [user, reload])
 
@@ -103,12 +113,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
 
   const name = useCallback(
-    (userId: string) => data?.profiles.find((p) => p.id === userId)?.name ?? 'Unknown',
+    (userId: string) => data?.profiles.find((p) => p.id === userId)?.name ?? 'Unbekannt',
     [data],
   )
 
   const familyName = useCallback(
-    (familyId: string | undefined) => data?.families.find((f) => f.id === familyId)?.name ?? 'No family',
+    (familyId: string | undefined) => data?.families.find((f) => f.id === familyId)?.name ?? 'Ohne Familie',
     [data],
   )
 

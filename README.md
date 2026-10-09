@@ -24,17 +24,21 @@ With no Firebase config the app runs in **demo mode**. Data is stored only in th
 | **Cancelling** | Free unless someone else is affected: if someone is waiting ("maybe") for your rooms, it is free until 4 months before arrival, after that it counts toward your costs. "Maybe" stays are always free to cancel. |
 | **Car** | Calendar of car bookings, tied to a stay or on their own. Every booking notifies the car owner, Günter Kobalt, and nobody else. |
 | **Fishing** | Map of catches with species, length, weight, reason (starving / injured), bait, photo and date. Live GPS: the pin follows your position, or tap the map to set it by hand. |
-| **Board** | Tips, trips, reviews and restaurants with star ratings, photos and comments. Authors can edit and delete their own posts. |
-| **Costs & usage (admins only)** | For each year: what each family owes, with every member's stays, nights and person-nights. Costs are split by person-nights (1 person × 1 night = 1). Download as CSV for Excel or Google Sheets. |
-| **Families** | Right after signing up, everyone must choose their family (or add it if it is missing) before they can use the app. Priority and costs are per family. Admins can rename families and move members between them. |
+| **Board** | Tips, trips, reviews and restaurants with star ratings, photos and comments. Authors can edit and delete their own posts. Second tab: **shopping list** for the next visitors (add, tick off, clear). |
+| **Costs & usage (admins only)** | For each year: what each clan (or family without a clan) owes, with families and members underneath. Costs are split by person-nights (1 person × 1 night = 1). Download as a formatted **Excel** file (Übersicht, Details, Kosten). |
+| **Families** | Right after signing up, everyone must choose their family (or add it if it is missing), or "no family" for people who don't pay (cleaner, car owner). Priority is per family. Admins can rename families and move members between them. |
+| **Clans (owner)** | Groups of families that pay together. The owner creates clans and assigns families; families without a clan pay themselves. |
+| **Push notifications** | Real push on Android (app) and in the browser / iPhone home-screen app. Sent by the server functions in [functions/index.js](functions/index.js): every in-app notification, plus for the **cleaner**: new or cancelled stays and a reminder at 08:00 the day before each arrival. |
+| **Language** | The whole app is in German (de-CH dates and numbers). |
 | **Settings (admin)** | Rooms, house name and location, free-cancellation months, currency. |
 
 ### Who sees what
 
-- **Owner** (you): everything, and the only one who can make people admin or car keeper.
+- **Owner** (you): everything, and the only one who can change roles, set the priority rotation and manage clans.
 - **Admin**: everything except changing roles. Sees and edits rent, water, electricity and supplies, the cost per night and who owes what.
 - **Member**: Home (upcoming stays and who's been there, without money), Stays (to book), Fishing, Car and Board.
-- **Car owner** (Günter Kobalt): the only person who gets the car notifications. There can be only one.
+- **Car owner** (Günter Kobalt): the only person who gets the car notifications. There can be only one. Does not pay.
+- **Cleaner**: sees stays, gets push notifications about new or cancelled stays and the day before each arrival. Does not pay.
 - **Waiting for approval**: everyone who signs up. They see nothing until the owner approves them under Profile → Members.
 
 Firebase enforces these rules too ([firestore.rules](firestore.rules), [storage.rules](storage.rules)), so they hold even outside the app.
@@ -79,6 +83,14 @@ The native Firebase config files are not in git. If they are missing, download t
 - `ios/App/App/GoogleService-Info.plist`
 
 Icons and splash screens come from `assets/`. Regenerate them with `npx capacitor-assets generate`.
+
+### Server functions (push notifications)
+
+```bash
+npx firebase-tools deploy --only functions
+```
+
+If the deploy times out while "analyzing source code" (slow OneDrive folder), run it with `FUNCTIONS_DISCOVERY_TIMEOUT=60` set.
 
 ## Code map
 

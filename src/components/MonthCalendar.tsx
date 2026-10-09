@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { addDays, addMonths, today, toDate } from '../lib/dates'
+import { addDays, addMonths, LOCALE, today, toDate } from '../lib/dates'
 import { Icon } from './ui'
 
 export interface CalEvent {
@@ -11,8 +11,8 @@ export interface CalEvent {
   label: string
 }
 
-const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
-const monthFmt = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' })
+const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+const monthFmt = new Intl.DateTimeFormat(LOCALE, { month: 'long', year: 'numeric', timeZone: 'UTC' })
 
 /** Month grid; each day shows a colored bar per event covering it. */
 export function MonthCalendar({ events, selected, onSelect }: {
@@ -30,9 +30,9 @@ export function MonthCalendar({ events, selected, onSelect }: {
   return (
     <div className="calendar">
       <div className="cal-head">
-        <button className="icon-btn" onClick={() => setMonth(addMonths(month, -1))} aria-label="Previous month"><Icon name="chevL" /></button>
+        <button className="icon-btn" onClick={() => setMonth(addMonths(month, -1))} aria-label="Vorheriger Monat"><Icon name="chevL" /></button>
         <strong>{monthFmt.format(first)}</strong>
-        <button className="icon-btn" onClick={() => setMonth(addMonths(month, 1))} aria-label="Next month"><Icon name="chevR" /></button>
+        <button className="icon-btn" onClick={() => setMonth(addMonths(month, 1))} aria-label="Nächster Monat"><Icon name="chevR" /></button>
       </div>
       <div className="cal-grid">
         {WEEKDAYS.map((w) => <span key={w} className="cal-wd">{w}</span>)}

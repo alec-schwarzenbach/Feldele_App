@@ -2,6 +2,7 @@ import type {
   AppNotification,
   CarBooking,
   Catch,
+  Clan,
   Comment,
   CostEntry,
   Family,
@@ -10,9 +11,12 @@ import type {
   Reservation,
   Room,
   Settings,
+  ShoppingItem,
 } from './types'
 import { createLocalApi } from './localApi'
 import { createFirebaseApi } from './firebaseApi'
+
+export type PushState = 'on' | 'off' | 'denied' | 'unsupported'
 
 export type New<T> = Omit<T, 'id' | 'createdAt' | 'updatedAt' | 'userId'>
 
@@ -38,6 +42,25 @@ export interface Api {
   addFamily(name: string): Promise<Family>
   renameFamily(id: string, name: string): Promise<void>
   deleteFamily(id: string): Promise<void>
+  /** Owner only: which clan a family pays with (undefined = the family pays itself). */
+  setFamilyClan(familyId: string, clanId: string | undefined): Promise<void>
+
+  listClans(): Promise<Clan[]>
+  addClan(name: string): Promise<void>
+  renameClan(id: string, name: string): Promise<void>
+  deleteClan(id: string): Promise<void>
+
+  listShopping(): Promise<ShoppingItem[]>
+  addShopping(text: string): Promise<void>
+  setShoppingDone(id: string, done: boolean): Promise<void>
+  deleteShopping(id: string): Promise<void>
+
+  /**
+   * Push notifications for this phone/browser. With ask=true the phone shows its
+   * permission prompt (call it from a button tap); with ask=false it only refreshes
+   * an already granted permission. The server then sends pushes to this device.
+   */
+  enablePush(ask: boolean): Promise<PushState>
 
   getSettings(): Promise<Settings>
   updateSettings(patch: Partial<Settings>): Promise<void>

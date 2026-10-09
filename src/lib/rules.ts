@@ -1,5 +1,5 @@
 import { addDays, addMonths, nightsBetween, nightsInYear, overlaps, today } from './dates'
-import type { CarBooking, CostEntry, Family, Profile, Reservation, Room, Settings } from './types'
+import type { CarBooking, Clan, CostEntry, Family, Profile, Reservation, Room, Settings } from './types'
 
 /** Days a priority user has to cancel for free after taking over someone else's dates. */
 export const CLAIM_FREE_DAYS = 28
@@ -82,18 +82,18 @@ export interface CancelTerms {
  *  - otherwise: free if nobody is waiting for the rooms, or more than N months before arrival
  */
 export function cancelTerms(r: Reservation, all: Reservation[], settings: Settings, on = today()): CancelTerms {
-  if (r.status === 'tentative') return { charged: false, why: '"Maybe" stays can always be cancelled for free.' }
+  if (r.status === 'tentative') return { charged: false, why: '«Vielleicht»-Aufenthalte kannst du jederzeit gratis stornieren.' }
   if (r.priorityClaim && r.claimDeadline) {
     return on <= r.claimDeadline
-      ? { charged: false, freeUntil: r.claimDeadline, why: 'You used your priority on these dates.' }
-      : { charged: true, why: `You used your priority and the ${CLAIM_FREE_DAYS / 7} weeks to cancel for free are over.` }
+      ? { charged: false, freeUntil: r.claimDeadline, why: 'Du hast für diese Daten deine Priorität genutzt.' }
+      : { charged: true, why: `Du hast deine Priorität genutzt und die ${CLAIM_FREE_DAYS / 7} Wochen für eine Gratis-Stornierung sind vorbei.` }
   }
   const waiting = waitingFor(r, all)
-  if (!waiting.length) return { charged: false, why: 'Nobody else is waiting for these dates, so cancelling is free.' }
+  if (!waiting.length) return { charged: false, why: 'Niemand sonst wartet auf diese Daten – Stornieren ist gratis.' }
   const deadline = freeCancelDeadline(r, settings)
   return on <= deadline
-    ? { charged: false, freeUntil: deadline, why: `Others are waiting for these dates (free until ${settings.freeCancelMonths} months before arrival).` }
-    : { charged: true, why: `Others are waiting for these dates and arrival is less than ${settings.freeCancelMonths} months away.` }
+    ? { charged: false, freeUntil: deadline, why: `Andere warten auf diese Daten (gratis bis ${settings.freeCancelMonths} Monate vor der Anreise).` }
+    : { charged: true, why: `Andere warten auf diese Daten und die Anreise ist weniger als ${settings.freeCancelMonths} Monate entfernt.` }
 }
 
 export const claimDeadlineFrom = (day = today()) => addDays(day, CLAIM_FREE_DAYS)
@@ -119,6 +119,9 @@ export function isBillable(r: Reservation): boolean {
   return r.status === 'active' || !!r.lateCancel
 }
 
+/** The car owner and the cleaner use the app but don't pay. */
+export const isPayer = (u: Profile) => u.role !== 'car_keeper' && u.role !== 'cleaner' && u.role !== 'pending'
+
 export interface MemberStats {
   user: Profile
   stays: number
@@ -130,14 +133,24 @@ export interface MemberStats {
   owed: number
 }
 
-/** A family pays together: the sum of its members' person-nights. */
-export interface FamilyStats {
-  family: Family | undefined
-  members: MemberStats[]
+interface Totals {
   nights: number
   personNights: number
   share: number
   owed: number
+}
+
+export interface FamilyStats extends Totals {
+  family: Family | undefined
+  members: MemberStats[]
+}
+
+/** Who actually pays: a clan (several families), or a family without a clan. */
+export interface PayerStats extends Totals {
+  key: string
+  name: string
+  clan: Clan | undefined
+  families: FamilyStats[]
 }
 
 export interface YearReport {
@@ -147,18 +160,27 @@ export interface YearReport {
   totalPersonNights: number
   rows: MemberStats[]
   families: FamilyStats[]
+  payers: PayerStats[]
+}
+
+const addTotals = (into: Totals, from: Totals) => {
+  into.nights += from.nights
+  into.personNights += from.personNights
+  into.share += from.share
+  into.owed += from.owed
 }
 
 /**
  * Costs are split by person-nights: every person (member + guests) staying one
- * night counts as 1. Each family pays the share of its members' person-nights.
- * Late-cancelled stays still count, as if they had been used.
+ * night counts as 1. A clan pays for all its families together; a family without
+ * a clan pays for itself. Late-cancelled stays still count, as if they had been used.
  * Only past nights count — future reservations would distort the bill.
  */
 export function buildYearReport(
   year: number,
   users: Profile[],
   families: Family[],
+  clans: Clan[],
   reservations: Reservation[],
   costs: CostEntry[],
   upTo = today(),
@@ -170,30 +192,28 @@ export function buildYearReport(
     totalCosts += c.amount
   }
 
-  const rows: MemberStats[] = users
-    .filter((u) => u.role !== 'car_keeper' && u.role !== 'pending')
-    .map((user) => {
-      const mine = reservations.filter((r) => r.userId === user.id && isBillable(r) && r.start < upTo)
-      let nights = 0
-      let personNights = 0
-      let lateCancelPersonNights = 0
-      let stays = 0
-      let hosted = 0
-      for (const r of mine) {
-        const end = r.end < upTo ? r.end : upTo
-        const n = nightsInYear(r.start, end, year)
-        if (n === 0) continue
-        if (r.status === 'cancelled') {
-          lateCancelPersonNights += n * r.people
-        } else {
-          stays++
-          nights += n
-          if (r.occasion) hosted++
-        }
-        personNights += n * r.people
+  const rows: MemberStats[] = users.filter(isPayer).map((user) => {
+    const mine = reservations.filter((r) => r.userId === user.id && isBillable(r) && r.start < upTo)
+    let nights = 0
+    let personNights = 0
+    let lateCancelPersonNights = 0
+    let stays = 0
+    let hosted = 0
+    for (const r of mine) {
+      const end = r.end < upTo ? r.end : upTo
+      const n = nightsInYear(r.start, end, year)
+      if (n === 0) continue
+      if (r.status === 'cancelled') {
+        lateCancelPersonNights += n * r.people
+      } else {
+        stays++
+        nights += n
+        if (r.occasion) hosted++
       }
-      return { user, stays, nights, personNights, lateCancelPersonNights, hosted, share: 0, owed: 0 }
-    })
+      personNights += n * r.people
+    }
+    return { user, stays, nights, personNights, lateCancelPersonNights, hosted, share: 0, owed: 0 }
+  })
 
   const totalPersonNights = rows.reduce((s, r) => s + r.personNights, 0)
   for (const row of rows) {
@@ -205,40 +225,30 @@ export function buildYearReport(
   const byFamily = new Map<string, FamilyStats>()
   for (const row of rows) {
     const key = row.user.familyId ?? ''
-    const f = byFamily.get(key) ?? {
-      family: families.find((x) => x.id === key), members: [], nights: 0, personNights: 0, share: 0, owed: 0,
-    }
+    const f = byFamily.get(key) ?? { family: families.find((x) => x.id === key), members: [], nights: 0, personNights: 0, share: 0, owed: 0 }
     f.members.push(row)
-    f.nights += row.nights
-    f.personNights += row.personNights
-    f.share += row.share
-    f.owed += row.owed
+    addTotals(f, row)
     byFamily.set(key, f)
   }
   const familyStats = [...byFamily.values()].sort((a, b) => b.personNights - a.personNights)
 
-  return { year, totalCosts, costsByCategory, totalPersonNights, rows, families: familyStats }
-}
-
-export const familyLabel = (f: Family | undefined) => f?.name ?? 'No family chosen'
-
-export function reportToCsv(report: YearReport, currency: string): string {
-  const header = ['Family', 'Member', 'Stays', 'Nights', 'Person-nights', 'of which late cancellations', 'Parties hosted', 'Share %', `Owed (${currency})`]
-  const lines: unknown[][] = []
-  for (const f of report.families) {
-    lines.push([familyLabel(f.family), '(family total)', '', f.nights, f.personNights, '', '', (f.share * 100).toFixed(1), f.owed.toFixed(2)])
-    for (const r of f.members) {
-      lines.push([familyLabel(f.family), r.user.name, r.stays, r.nights, r.personNights, r.lateCancelPersonNights, r.hosted,
-        (r.share * 100).toFixed(1), r.owed.toFixed(2)])
+  const byPayer = new Map<string, PayerStats>()
+  for (const f of familyStats) {
+    const clan = clans.find((c) => c.id === f.family?.clanId)
+    const key = clan ? `clan:${clan.id}` : `family:${f.family?.id ?? ''}`
+    const p = byPayer.get(key) ?? {
+      key, clan, name: clan ? clan.name : familyLabel(f.family), families: [], nights: 0, personNights: 0, share: 0, owed: 0,
     }
+    p.families.push(f)
+    addTotals(p, f)
+    byPayer.set(key, p)
   }
-  lines.push(['Total', '', '', '', report.totalPersonNights, '', '', '100', report.totalCosts.toFixed(2)])
-  const esc = (v: unknown) => {
-    const s = String(v)
-    return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-  }
-  return [header, ...lines].map((l) => l.map(esc).join(',')).join('\n')
+  const payers = [...byPayer.values()].sort((a, b) => b.owed - a.owed)
+
+  return { year, totalCosts, costsByCategory, totalPersonNights, rows, families: familyStats, payers }
 }
+
+export const familyLabel = (f: Family | undefined) => f?.name ?? 'Ohne Familie'
 
 export function stayNights(r: Reservation): number {
   return nightsBetween(r.start, r.end)
@@ -246,7 +256,7 @@ export function stayNights(r: Reservation): number {
 
 /** Name of the person who gets the car notifications. */
 export function carOwnerName(profiles: Profile[]): string {
-  return profiles.find((p) => p.role === 'car_keeper')?.name ?? 'the car owner'
+  return profiles.find((p) => p.role === 'car_keeper')?.name ?? 'der Autobesitzer'
 }
 
 /** "Doppelzimmer (OG)" – the area tells apart rooms with the same name. */

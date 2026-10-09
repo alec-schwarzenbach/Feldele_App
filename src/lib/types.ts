@@ -1,8 +1,12 @@
 /**
  * owner: the one person who can hand out roles. admin: sees and edits costs and settings.
+ * car_keeper: the car owner (Günter), gets the car notifications. cleaner: gets push notifications about stays.
  * pending: signed up, but sees nothing until the owner approves them.
  */
-export type Role = 'owner' | 'admin' | 'member' | 'car_keeper' | 'pending'
+export type Role = 'owner' | 'admin' | 'member' | 'car_keeper' | 'cleaner' | 'pending'
+
+/** familyId for people who don't belong to a family (e.g. the cleaner or the car owner). */
+export const NO_FAMILY = '_none'
 
 export interface Profile {
   id: string
@@ -13,12 +17,30 @@ export interface Profile {
   familyId?: string
 }
 
-/** Families share priority and pay together. Any member can add one. */
+/** Families share priority. Any member can add one. */
 export interface Family {
   id: string
   name: string
+  /** The clan that pays for this family; without a clan the family pays itself. Set by the owner. */
+  clanId?: string
   createdBy?: string
   createdAt?: string
+}
+
+/** Several families that pay the yearly costs together. */
+export interface Clan {
+  id: string
+  name: string
+}
+
+/** Something the next visitors should buy. */
+export interface ShoppingItem {
+  id: string
+  userId: string
+  text: string
+  done?: boolean
+  doneBy?: string
+  createdAt: string
 }
 
 export interface Room {
@@ -75,7 +97,7 @@ export interface AppNotification {
   id: string
   userId: string
   /** car: only ever sent to the car owner. stay: changes to your own stay. */
-  kind: 'car' | 'stay'
+  kind: 'car' | 'stay' | 'cleaner'
   title: string
   body: string
   read: boolean

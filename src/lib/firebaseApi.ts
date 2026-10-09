@@ -29,7 +29,7 @@ import {
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage'
 import type { Api } from './api'
 import { formatDay } from './dates'
-import type { AppNotification, CarBooking, Family, Post, Profile, Reservation, Room, Settings } from './types'
+import type { AppNotification, CarBooking, Clan, Family, Post, Profile, Reservation, Room, Settings, ShoppingItem } from './types'
 import { isAdmin } from './types'
 
 // Real backend on Firebase. Documents store the same camelCase fields as the
@@ -87,7 +87,7 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
   }
   const myId = () => {
     const uid = auth.currentUser?.uid
-    if (!uid) throw new Error('Not signed in')
+    if (!uid) throw new Error('Nicht angemeldet')
     return uid
   }
   const list = async <T>(name: string) => rows<T>(await getDocs(col(name)))
@@ -131,6 +131,51 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
     },
     renameFamily: (id, name) => update('families', id, { name: name.trim() }),
     deleteFamily: (id) => remove('families', id),
+    setFamilyClan: (familyId, clanId) => update('families', familyId, { clanId }),
+
+    listClans: async () => (await list<Clan>('clans')).sort((a, b) => a.name.localeCompare(b.name)),
+    async addClan(name) {
+      await addDoc(col('clans'), { name: name.trim(), createdAt: now() })
+    },
+    renameClan: (id, name) => update('clans', id, { name: name.trim() }),
+    deleteClan: (id) => remove('clans', id),
+
+    listShopping: () => list<ShoppingItem>('shopping'),
+    async addShopping(text) {
+      await addDoc(col('shopping'), { text: text.trim(), userId: myId(), done: false, createdAt: now() })
+    },
+    setShoppingDone: (id, done) => update('shopping', id, { done, doneBy: done ? myId() : undefined }),
+    deleteShopping: (id) => remove('shopping', id),
+
+    async enablePush(ask) {
+      // The token itself is the document id, so registering twice just refreshes it.
+      const save = (token: string, platform: 'web' | 'android' | 'ios') =>
+        setDoc(doc(db, 'pushTokens', token), { userId: myId(), platform, updatedAt: now() })
+
+      if (Capacitor.isNativePlatform()) {
+        const { PushNotifications } = await import('@capacitor/push-notifications')
+        let perm = await PushNotifications.checkPermissions()
+        if (perm.receive !== 'granted' && ask) perm = await PushNotifications.requestPermissions()
+        if (perm.receive !== 'granted') return perm.receive === 'denied' ? 'denied' : 'off'
+        const token = await new Promise<string>((resolve, reject) => {
+          PushNotifications.addListener('registration', (t) => resolve(t.value))
+          PushNotifications.addListener('registrationError', (e) => reject(new Error(e.error)))
+          PushNotifications.register()
+        })
+        await save(token, Capacitor.getPlatform() === 'ios' ? 'ios' : 'android')
+        return 'on'
+      }
+
+      // Browser / iPhone home-screen app: Web Push through Firebase Cloud Messaging.
+      const { getMessaging, getToken, isSupported } = await import('firebase/messaging')
+      if (!('Notification' in window) || !(await isSupported())) return 'unsupported'
+      if (Notification.permission === 'default' && ask) await Notification.requestPermission()
+      if (Notification.permission !== 'granted') return Notification.permission === 'denied' ? 'denied' : 'off'
+      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js')
+      const token = await getToken(getMessaging(app), { serviceWorkerRegistration: registration })
+      await save(token, 'web')
+      return 'on'
+    },
 
     async getSettings() {
       const snap = await getDoc(doc(db, 'settings', 'main'))
@@ -172,9 +217,9 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
       for (const k of real(keepers)) {
         batch.set(doc(col('notifications')), {
           userId: k.id, kind: 'car', read: false, createdAt: now(),
-          title: `Car needed: ${me?.name ?? 'Someone'}`,
-          body: `${me?.name ?? 'Someone'} needs the car from ${formatDay(b.start, true)} to ${formatDay(b.end, true)}.`
-            + (b.note ? ` Note: ${b.note}` : ''),
+          title: `Auto benötigt: ${me?.name ?? 'Jemand'}`,
+          body: `${me?.name ?? 'Jemand'} braucht das Auto vom ${formatDay(b.start, true)} bis ${formatDay(b.end, true)}.`
+            + (b.note ? ` Notiz: ${b.note}` : ''),
         })
       }
       await batch.commit()
@@ -236,13 +281,14 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
 }
 
 const MESSAGES: Record<string, string> = {
-  'auth/invalid-credential': 'Wrong email or password',
-  'auth/invalid-email': 'That email address looks wrong',
-  'auth/email-already-in-use': 'An account with this email already exists',
-  'auth/weak-password': 'Password must be at least 6 characters',
-  'auth/too-many-requests': 'Too many attempts – try again in a few minutes',
+  'auth/invalid-credential': 'E-Mail oder Passwort falsch',
+  'auth/invalid-email': 'Diese E-Mail-Adresse stimmt nicht',
+  'auth/email-already-in-use': 'Mit dieser E-Mail gibt es schon ein Konto',
+  'auth/weak-password': 'Das Passwort braucht mindestens 6 Zeichen',
+  'auth/too-many-requests': 'Zu viele Versuche – bitte in ein paar Minuten nochmals',
+  'auth/network-request-failed': 'Keine Internetverbindung',
 }
 
 function friendly(e: { code?: string; message?: string }): never {
-  throw new Error(MESSAGES[e.code ?? ''] ?? e.message ?? 'Something went wrong')
+  throw new Error(MESSAGES[e.code ?? ''] ?? e.message ?? 'Etwas ist schiefgelaufen')
 }

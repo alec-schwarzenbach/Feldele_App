@@ -4,9 +4,11 @@ rules_version = '2';
 //  - owner:      everything; the only one who can change roles (set the owner once in the Firebase console)
 //  - admin:      everything except roles; the only ones who see costs
 //  - member:     stays, car, fishing, board
-//  - car_keeper: same as member; receives the car notifications
+//  - car_keeper: the car owner (Günter); receives the car notifications, doesn't pay
+//  - cleaner:    sees stays; gets push notifications about stays (sent by the server), doesn't pay
 //  - pending:    new sign-up, can only read their own profile and the families until approved
-//  Every profile belongs to a family (familyId); priority and costs are per family.
+//  Every profile belongs to a family (familyId, or "_none"); priority is per family,
+//  costs are paid per clan (families without a clan pay themselves).
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -22,7 +24,8 @@ service cloud.firestore {
     function createsMine() { return request.resource.data.userId == request.auth.uid; }
     function changes() { return request.resource.data.diff(resource.data).affectedKeys(); }
 
-    function familyExists(id) { return id is string && exists(/databases/$(database)/documents/families/$(id)); }
+    // '_none' = belongs to no family (e.g. the cleaner or the car owner)
+    function familyExists(id) { return id == '_none' || (id is string && exists(/databases/$(database)/documents/families/$(id))); }
 
     // ── Profiles ──
     match /profiles/{uid} {
@@ -42,20 +45,43 @@ service cloud.firestore {
             && (!('familyId' in request.resource.data) || familyExists(request.resource.data.familyId)))
         // only the owner hands out roles, and never the owner role itself
         || (owner() && uid != request.auth.uid && resource.data.role != 'owner'
-            && request.resource.data.role in ['pending', 'member', 'admin', 'car_keeper']
+            && request.resource.data.role in ['pending', 'member', 'admin', 'car_keeper', 'cleaner']
             && changes().hasOnly(['role']));
     }
 
-    // ── Families: share priority and pay together ──
+    // ── Families: share priority ──
     // Readable while waiting for approval, so new members can pick theirs.
-    // Anyone signed in can add one; only admins rename or delete.
+    // Anyone signed in can add one; admins rename or delete; only the owner puts a family in a clan.
     match /families/{id} {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.name is string
         && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60
-        && request.resource.data.createdBy == request.auth.uid;
-      allow update: if admin() && changes().hasOnly(['name']);
+        && request.resource.data.createdBy == request.auth.uid
+        && !('clanId' in request.resource.data);
+      allow update: if (admin() && changes().hasOnly(['name']))
+        || (owner() && changes().hasOnly(['clanId']));
       allow delete: if admin();
+    }
+
+    // ── Clans: several families that pay together. Only the owner manages them. ──
+    match /clans/{id} {
+      allow read: if approved();
+      allow write: if owner();
+    }
+
+    // ── Shopping list on the board: everyone adds, ticks off and removes items ──
+    match /shopping/{id} {
+      allow read: if approved();
+      allow create: if approved() && createsMine() && request.resource.data.text is string
+        && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 200;
+      allow update: if approved() && changes().hasOnly(['done', 'doneBy']);
+      allow delete: if approved();
+    }
+
+    // ── Push tokens: one per phone/browser; only the server reads them ──
+    match /pushTokens/{token} {
+      allow create, update: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
     }
 
     // ── Settings & rooms: everyone reads, admins edit; only the owner sets the priority order ──
@@ -139,7 +165,8 @@ service cloud.firestore {
     }
 
     // Car notifications go only to the car owner (Günter). Stay notifications
-    // tell a member that their stay became "maybe" or confirmed.
+    // tell a member that their stay became "maybe" or confirmed. Cleaner
+    // notifications are only created by the server (functions/index.js).
     // Only the recipient can read them.
     match /notifications/{id} {
       allow read, delete: if signedIn() && mine();

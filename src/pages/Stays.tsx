@@ -20,6 +20,7 @@ export function Stays() {
   const open = data.reservations.filter((r) => r.status !== 'cancelled')
   const priorityId = priorityFamilyFor(Number(t.slice(0, 4)), data.settings)
   const nextPriorityId = priorityFamilyFor(Number(t.slice(0, 4)) + 1, data.settings)
+  const staff = user.role === 'car_keeper' || user.role === 'cleaner'
 
   let list: Reservation[]
   if (day) list = open.filter((r) => r.start <= day && day < r.end)
@@ -32,11 +33,11 @@ export function Stays() {
 
   return (
     <>
-      <Header title="Stays" />
+      <Header title="Aufenthalte" />
       <div className="page">
         {priorityId && (
           <p className="info small">
-            ⭐ Priority {t.slice(0, 4)}: <strong>{familyName(priorityId)}</strong>
+            ⭐ Priorität {t.slice(0, 4)}: <strong>{familyName(priorityId)}</strong>
             {nextPriorityId && <> · {Number(t.slice(0, 4)) + 1}: <strong>{familyName(nextPriorityId)}</strong></>}
           </p>
         )}
@@ -49,37 +50,37 @@ export function Stays() {
         {day ? (
           <div className="row-head">
             <h2>{formatDay(day, true)}</h2>
-            <button className="btn small ghost" onClick={() => setDay(undefined)}>Show all</button>
+            <button className="btn small ghost" onClick={() => setDay(undefined)}>Alle zeigen</button>
           </div>
         ) : (
           <Segmented value={view} onChange={setView} options={[
-            { value: 'upcoming', label: 'Upcoming' },
-            { value: 'mine', label: 'Mine' },
-            { value: 'past', label: 'Past' },
+            { value: 'upcoming', label: 'Kommende' },
+            { value: 'mine', label: 'Meine' },
+            { value: 'past', label: 'Vergangene' },
           ]} />
         )}
 
-        {list.length === 0 && <Empty>{day ? 'Nobody booked on this day.' : 'No stays here yet.'}</Empty>}
+        {list.length === 0 && <Empty>{day ? 'An diesem Tag hat niemand gebucht.' : 'Hier gibt es noch keine Aufenthalte.'}</Empty>}
         {list.map((r) => (
           <Link key={r.id} to={`/stays/${r.id}`} className={'card row' + (r.status === 'cancelled' ? ' faded' : '')}>
             <Avatar id={r.userId} name={name(r.userId)} />
             <div className="grow">
               <strong>{formatRange(r.start, r.end)}</strong>
               <p className="small muted">
-                {name(r.userId)} · {stayNights(r)} nights · {r.people} people
+                {name(r.userId)} · {stayNights(r)} {stayNights(r) === 1 ? 'Nacht' : 'Nächte'} · {r.people} {r.people === 1 ? 'Person' : 'Personen'}
               </p>
               <p className="small muted">{roomNames(r.roomIds)}</p>
               {r.occasion && <p className="small">🎉 {r.occasion}</p>}
-              {r.status === 'tentative' && <span className="tag warn">Maybe</span>}
-              {r.priorityClaim && r.status === 'active' && <span className="tag">⭐ Priority</span>}
+              {r.status === 'tentative' && <span className="tag warn">Vielleicht</span>}
+              {r.priorityClaim && r.status === 'active' && <span className="tag">⭐ Priorität</span>}
               {r.status === 'cancelled' && (
-                <span className={'tag ' + (r.lateCancel ? 'warn' : '')}>{r.lateCancel ? 'Cancelled late – billed' : 'Cancelled'}</span>
+                <span className={'tag ' + (r.lateCancel ? 'warn' : '')}>{r.lateCancel ? 'Spät storniert – wird verrechnet' : 'Storniert'}</span>
               )}
             </div>
           </Link>
         ))}
       </div>
-      {user.role !== 'car_keeper' && <Fab to="/stays/new" label="Book a stay" />}
+      {!staff && <Fab to="/stays/new" label="Aufenthalt buchen" />}
     </>
   )
 }

@@ -9,11 +9,11 @@ import { useData } from '../lib/store'
 import { isAdmin, type Catch, type CatchReason } from '../lib/types'
 import { useLivePosition, type LivePosition } from '../lib/useLivePosition'
 
-const SPECIES = ['Pike', 'Brown trout', 'Rainbow trout', 'Char', 'Perch', 'Zander', 'Carp', 'Grayling', 'Catfish']
+const SPECIES = ['Hecht', 'Bachforelle', 'Regenbogenforelle', 'Saibling', 'Egli', 'Zander', 'Karpfen', 'Äsche', 'Wels']
 
 const REASONS: { value: CatchReason; label: string; emoji: string }[] = [
-  { value: 'starving', label: 'Starving', emoji: '🦴' },
-  { value: 'injured', label: 'Injured', emoji: '🩹' },
+  { value: 'starving', label: 'Abgemagert', emoji: '🦴' },
+  { value: 'injured', label: 'Verletzt', emoji: '🩹' },
 ]
 const reasonLabel = (r?: CatchReason) => REASONS.find((x) => x.value === r)
 
@@ -39,11 +39,11 @@ export function Fishing() {
 
   return (
     <>
-      <Header title="Fishing" />
+      <Header title="Fischen" />
       <div className="page">
-        <Segmented value={view} onChange={setView} options={[{ value: 'map', label: 'Map' }, { value: 'list', label: 'List' }]} />
+        <Segmented value={view} onChange={setView} options={[{ value: 'map', label: 'Karte' }, { value: 'list', label: 'Liste' }]} />
         <div className="chips scroll">
-          <button className={'chip' + (species === 'all' ? ' on' : '')} onClick={() => setSpecies('all')}>All ({data.catches.length})</button>
+          <button className={'chip' + (species === 'all' ? ' on' : '')} onClick={() => setSpecies('all')}>Alle ({data.catches.length})</button>
           {allSpecies.map((sp) => (
             <button key={sp} className={'chip' + (species === sp ? ' on' : '')} onClick={() => setSpecies(sp)}>{sp}</button>
           ))}
@@ -61,16 +61,16 @@ export function Fishing() {
                 {gps && <MyPosition gps={gps} />}
               </MapContainer>
             </div>
-            {selected ? <CatchCard c={selected} by={name(selected.userId)} /> : <p className="muted small center">Tap a fish to see the catch.</p>}
+            {selected ? <CatchCard c={selected} by={name(selected.userId)} /> : <p className="muted small center">Tippe auf einen Fisch, um den Fang zu sehen.</p>}
           </>
         ) : (
           <>
-            {catches.length === 0 && <Empty>No catches yet.</Empty>}
+            {catches.length === 0 && <Empty>Noch keine Fänge.</Empty>}
             {catches.map((c) => <CatchCard key={c.id} c={c} by={name(c.userId)} />)}
           </>
         )}
       </div>
-      <Fab to="/fishing/new" label="Log a catch" />
+      <Fab to="/fishing/new" label="Fang eintragen" />
     </>
   )
 }
@@ -83,13 +83,13 @@ function CatchCard({ c, by }: { c: Catch; by: string }) {
       <div className="row-head">
         <h2>{c.species}</h2>
         {(c.userId === user.id || isAdmin(user)) && (
-          <button className="icon-btn" aria-label="Delete catch"
-            onClick={() => confirm('Delete this catch?') && mutate(() => api.deleteCatch(c.id))}>
+          <button className="icon-btn" aria-label="Fang löschen"
+            onClick={() => confirm('Diesen Fang löschen?') && mutate(() => api.deleteCatch(c.id))}>
             <Icon name="trash" size={18} />
           </button>
         )}
       </div>
-      <p><strong>{c.lengthCm} cm</strong>{c.weightKg ? ` · ${c.weightKg} kg` : ''}{c.bait ? ` · bait: ${c.bait}` : ''}</p>
+      <p><strong>{c.lengthCm} cm</strong>{c.weightKg ? ` · ${c.weightKg} kg` : ''}{c.bait ? ` · Köder: ${c.bait}` : ''}</p>
       {reasonLabel(c.reason) && <span className="tag">{reasonLabel(c.reason)!.emoji} {reasonLabel(c.reason)!.label}</span>}
       <p className="small muted">{by} · {formatDay(c.caughtAt, true)}</p>
       {c.note && <p className="small">{c.note}</p>}
@@ -146,8 +146,8 @@ export function CatchForm() {
 
   async function submit(e: FormEvent) {
     e.preventDefault()
-    if (!reason) return alert('Choose why the fish was taken out.')
-    if (!pos) return alert('Tap the map to mark where you caught it.')
+    if (!reason) return alert('Wähle, warum der Fisch entnommen wurde.')
+    if (!pos) return alert('Tippe auf die Karte, wo du ihn gefangen hast.')
     const ok = await mutate(async () => {
       await api.createCatch({
         species: species.trim(), lengthCm: Number(lengthCm), weightKg: weightKg ? Number(weightKg) : undefined, reason,
@@ -160,25 +160,25 @@ export function CatchForm() {
 
   return (
     <>
-      <Header title="Log a catch" back />
+      <Header title="Fang eintragen" back />
       <form className="page form" onSubmit={submit}>
         <PhotoPicker value={photoUrl} onChange={setPhoto} />
 
-        <label>Fish
-          <input list="species" value={species} onChange={(e) => setSpecies(e.target.value)} required placeholder="e.g. Pike" />
+        <label>Fisch
+          <input list="species" value={species} onChange={(e) => setSpecies(e.target.value)} required placeholder="z. B. Hecht" />
           <datalist id="species">{SPECIES.map((sp) => <option key={sp} value={sp} />)}</datalist>
         </label>
         <div className="grid2">
-          <label>Length (cm)<input type="number" inputMode="decimal" min={1} step="0.5" value={lengthCm} onChange={(e) => setLength(e.target.value)} required /></label>
-          <label>Weight (kg)<input type="number" inputMode="decimal" min={0} step="0.05" value={weightKg} onChange={(e) => setWeight(e.target.value)} placeholder="optional" /></label>
+          <label>Länge (cm)<input type="number" inputMode="decimal" min={1} step="0.5" value={lengthCm} onChange={(e) => setLength(e.target.value)} required /></label>
+          <label>Gewicht (kg)<input type="number" inputMode="decimal" min={0} step="0.05" value={weightKg} onChange={(e) => setWeight(e.target.value)} placeholder="freiwillig" /></label>
         </div>
         <div className="grid2">
-          <label>Date<input type="date" value={caughtAt} max={today()} onChange={(e) => setCaughtAt(e.target.value)} required /></label>
-          <label>Bait<input value={bait} onChange={(e) => setBait(e.target.value)} placeholder="optional" /></label>
+          <label>Datum<input type="date" value={caughtAt} max={today()} onChange={(e) => setCaughtAt(e.target.value)} required /></label>
+          <label>Köder<input value={bait} onChange={(e) => setBait(e.target.value)} placeholder="freiwillig" /></label>
         </div>
 
         <div>
-          <span className="label">Why was it taken out?</span>
+          <span className="label">Warum wurde er entnommen?</span>
           <div className="reason-pick">
             {REASONS.map((r) => (
               <button type="button" key={r.value} className={'room' + (reason === r.value ? ' on' : '')} onClick={() => setReason(r.value)}>
@@ -190,15 +190,15 @@ export function CatchForm() {
 
         <div>
           <div className="row-head">
-            <span className="label">Where?</span>
+            <span className="label">Wo?</span>
             {manualPos && gps && (
-              <button type="button" className="btn small ghost" onClick={followGps}><Icon name="locate" size={16} /> Use my position</button>
+              <button type="button" className="btn small ghost" onClick={followGps}><Icon name="locate" size={16} /> Meine Position</button>
             )}
           </div>
           <p className="small muted gps-status">
-            {manualPos ? '📍 Spot set by hand – tap the map again to move it.'
-              : gps ? `📡 Live GPS (±${Math.round(gps.accuracy)} m) – the pin follows you. Tap the map to set the spot by hand.`
-              : gpsError ?? 'Finding your position… or tap the map.'}
+            {manualPos ? '📍 Ort von Hand gesetzt – nochmals auf die Karte tippen, um ihn zu verschieben.'
+              : gps ? `📡 Live-GPS (±${Math.round(gps.accuracy)} m) – die Nadel folgt dir. Auf die Karte tippen, um den Ort von Hand zu setzen.`
+              : gpsError ?? 'Position wird gesucht… oder auf die Karte tippen.'}
           </p>
           <div className="map-wrap small">
             <MapContainer center={[s.lodgeLat, s.lodgeLng]} zoom={13} className="map" ref={setMap}>
@@ -210,8 +210,8 @@ export function CatchForm() {
           </div>
         </div>
 
-        <label>Note<textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Weather, depth, spot details…" /></label>
-        <button className="btn primary">Save catch</button>
+        <label>Notiz<textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Wetter, Tiefe, Details zur Stelle…" /></label>
+        <button className="btn primary">Fang speichern</button>
       </form>
     </>
   )

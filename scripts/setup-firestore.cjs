@@ -32,11 +32,19 @@ const ROOMS = [
 
 const EXAMPLES = {
   families: {
-    _about: 'A family. Members choose (or add) their family after signing up. Priority (settings/main.priorityOrder lists family ids) and costs are per family.',
-    name: 'Example family', createdBy: '(profile id)', createdAt: now,
+    _about: 'A family. Members choose (or add) their family after signing up. Priority is per family (settings/main.priorityOrder lists family ids). clanId: the clan that pays for this family (set by the owner); without it the family pays itself.',
+    name: 'Example family', clanId: '(clan id)', createdBy: '(profile id)', createdAt: now,
+  },
+  clans: {
+    _about: 'Several families that pay the yearly costs together. Only the owner creates clans and assigns families (families.clanId).',
+    name: 'Example clan', createdAt: now,
+  },
+  shopping: {
+    _about: 'Shopping list on the board: what the next visitors should buy. done = bought, doneBy = who bought it.',
+    text: 'Kaffee', userId: '(profile id)', done: false, createdAt: now,
   },
   profiles: {
-    _about: 'One document per login; the document id is the Firebase Auth user id. role: owner | admin | member | car_keeper (car owner) | pending. familyId: the family (see families), chosen right after sign-up. New sign-ups are pending until the owner approves them.',
+    _about: 'One document per login; the document id is the Firebase Auth user id. role: owner | admin | member | car_keeper (car owner) | cleaner (gets push about stays) | pending. familyId: the family (see families), or _none for people outside the families (cleaner, car owner), chosen right after sign-up. New sign-ups are pending until the owner approves them.',
     name: 'Example Person', email: 'example@example.com', role: 'member', familyId: '(family id)', createdAt: now,
   },
   reservations: {
@@ -50,7 +58,7 @@ const EXAMPLES = {
     note: 'Pick-up at the station at 18:00', createdAt: now,
   },
   notifications: {
-    _about: 'Messages for one person. kind: car (only ever to the car owner, Günter Kobalt) or stay (your stay became "maybe" or confirmed). Only the recipient can read them.',
+    _about: 'Messages for one person. kind: car (only ever to the car owner, Günter Kobalt), stay (your stay became "maybe" or confirmed) or cleaner (created by the server). Each new notification is sent as a push to the phones of the recipient (pushTokens). Only the recipient can read them.',
     userId: '(recipient profile id)', kind: 'car', title: 'Car needed: Example Person',
     body: 'Example Person needs the car from 15 Jan 2027 to 18 Jan 2027.', read: false, createdAt: now,
   },

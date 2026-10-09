@@ -2,10 +2,11 @@ import { useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
 
 const DEMO_USERS = [
-  { email: 'alec@lodge.test', label: 'Alec (owner)' },
+  { email: 'alec@lodge.test', label: 'Alec (Besitzer)' },
   { email: 'maria@lodge.test', label: 'Maria' },
   { email: 'thomas@lodge.test', label: 'Thomas' },
-  { email: 'guenther@lodge.test', label: 'Günther (car)' },
+  { email: 'guenther@lodge.test', label: 'Günter (Auto)' },
+  { email: 'rosa@lodge.test', label: 'Rosa (Cleaner)' },
 ]
 
 export function Login() {
@@ -35,28 +36,28 @@ export function Login() {
       <div className="login-hero">
         <div className="login-logo">🏕️</div>
         <h1>Feldele</h1>
-        <p>Stays, fishing, tips and the car – for all of us.</p>
+        <p>Aufenthalte, Fischen, Tipps und das Auto – für uns alle.</p>
       </div>
 
       <form className="card form" onSubmit={submit}>
         {mode === 'up' && (
           <label>Name<input value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" /></label>
         )}
-        <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" /></label>
-        <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={4}
+        <label>E-Mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" /></label>
+        <label>Passwort<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={4}
           autoComplete={mode === 'in' ? 'current-password' : 'new-password'} /></label>
-        {mode === 'up' && <p className="small muted">Next you'll choose your family (or add it).</p>}
+        {mode === 'up' && <p className="small muted">Danach wählst du deine Familie (oder fügst sie hinzu).</p>}
         {error && <p className="error">{error}</p>}
-        <button className="btn primary" disabled={busy}>{mode === 'in' ? 'Sign in' : 'Create account'}</button>
+        <button className="btn primary" disabled={busy}>{mode === 'in' ? 'Anmelden' : 'Konto erstellen'}</button>
         <button type="button" className="btn ghost" onClick={() => setMode(mode === 'in' ? 'up' : 'in')}>
-          {mode === 'in' ? 'New here? Create an account' : 'I already have an account'}
+          {mode === 'in' ? 'Neu hier? Konto erstellen' : 'Ich habe schon ein Konto'}
         </button>
       </form>
 
       {api.mode === 'demo' && (
         <div className="card demo-box">
-          <strong>Demo mode</strong>
-          <p className="muted small">Data lives only in this browser. Tap a person to sign in (password: demo).</p>
+          <strong>Demo-Modus</strong>
+          <p className="muted small">Die Daten sind nur in diesem Browser gespeichert. Tippe auf eine Person zum Anmelden (Passwort: demo).</p>
           <div className="chips">
             {DEMO_USERS.map((u) => (
               <button key={u.email} className="chip" onClick={() => api.signIn(u.email, 'demo')}>{u.label}</button>
@@ -73,11 +74,11 @@ export function Pending({ name }: { name: string }) {
     <div className="login">
       <div className="login-hero">
         <div className="login-logo">⏳</div>
-        <h1>Almost there, {name}</h1>
-        <p>Your account was created. The owner needs to approve it before you can see stays, catches and the board.</p>
+        <h1>Fast geschafft, {name}</h1>
+        <p>Dein Konto ist erstellt. Der Besitzer muss es noch freischalten, bevor du Aufenthalte, Fänge und die Pinnwand siehst.</p>
       </div>
-      <button className="btn primary" onClick={() => location.reload()}>Check again</button>
-      <button className="btn ghost" onClick={() => api.signOut()}>Sign out</button>
+      <button className="btn primary" onClick={() => location.reload()}>Nochmals prüfen</button>
+      <button className="btn ghost" onClick={() => api.signOut()}>Abmelden</button>
     </div>
   )
 }

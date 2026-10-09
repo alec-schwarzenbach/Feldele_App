@@ -7,6 +7,6 @@ export async function resizeImage(file: File, maxSize = 1280, quality = 0.8): Pr
   canvas.height = Math.round(bitmap.height * scale)
   canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
   return new Promise((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not read image'))), 'image/jpeg', quality),
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Das Bild konnte nicht gelesen werden'))), 'image/jpeg', quality),
   )
 }

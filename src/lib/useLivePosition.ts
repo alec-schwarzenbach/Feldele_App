@@ -15,7 +15,7 @@ export function useLivePosition(enabled = true) {
   useEffect(() => {
     if (!enabled) return
     if (!('geolocation' in navigator)) {
-      setError('This device has no location service.')
+      setError('Dieses Gerät hat keine Standortfunktion.')
       return
     }
     const id = navigator.geolocation.watchPosition(
@@ -25,8 +25,8 @@ export function useLivePosition(enabled = true) {
       },
       (e) =>
         setError(e.code === e.PERMISSION_DENIED
-          ? 'Location is blocked – allow it for this site in your browser settings.'
-          : 'Waiting for GPS…'),
+          ? 'Der Standort ist blockiert – erlaube ihn in den Einstellungen für Feldele.'
+          : 'Warte auf GPS…'),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
     )
     return () => navigator.geolocation.clearWatch(id)

@@ -38,6 +38,7 @@ export function StayForm() {
   const ce = carEnd || end
   const carClash = needCar ? carConflicts(data.carBookings, { start: cs, end: ce }) : []
   const deadline = freeCancelDeadline({ start }, data.settings)
+  const weeks = CLAIM_FREE_DAYS / 7
 
   function toggleRoom(rid: string) {
     setRoomIds((ids) => (ids.includes(rid) ? ids.filter((x) => x !== rid) : [...ids, rid]))
@@ -45,12 +46,12 @@ export function StayForm() {
 
   async function submit(e: FormEvent) {
     e.preventDefault()
-    if (!validDates) return alert('Departure must be after arrival.')
-    if (roomIds.length === 0) return alert('Pick at least one room.')
-    if (blocked) return alert('Some of these rooms are already booked in this period.')
+    if (!validDates) return alert('Die Abreise muss nach der Anreise sein.')
+    if (roomIds.length === 0) return alert('Wähle mindestens ein Zimmer.')
+    if (blocked) return alert('Einige dieser Zimmer sind in dieser Zeit schon gebucht.')
     if (!existing && plan.kind === 'claim' && !confirm(
-      `Your family has priority in ${start.slice(0, 4)}. ${[...new Set(plan.bump.map((b) => name(b.userId)))].join(', ')} ` +
-      `will be moved to "maybe" and notified.\n\nYou can cancel for free for ${CLAIM_FREE_DAYS / 7} weeks; after that you pay even if you don't go. Continue?`,
+      `Deine Familie hat ${start.slice(0, 4)} Priorität. ${[...new Set(plan.bump.map((b) => name(b.userId)))].join(', ')} ` +
+      `wird auf «Vielleicht» gesetzt und benachrichtigt.\n\nDu kannst ${weeks} Wochen lang gratis stornieren, danach bezahlst du auch, wenn du nicht gehst. Weiter?`,
     )) return
     setSaving(true)
     const fields = { start, end, people, roomIds, occasion: occasion.trim() || undefined, note: note.trim() || undefined }
@@ -67,9 +68,9 @@ export function StayForm() {
       if (plan.kind === 'claim') {
         for (const b of plan.bump) {
           await api.bumpReservation(b.id, r.id)
-          await api.notifyStay(b.userId, 'Your stay is now "maybe"',
-            `${user.name} (family ${familyName(user.familyId)}) has priority in ${start.slice(0, 4)} and booked ${formatRange(start, end)}. ` +
-            `Your stay ${formatRange(b.start, b.end)} is now "maybe" – it becomes confirmed again if ${user.name} cancels.`)
+          await api.notifyStay(b.userId, 'Dein Aufenthalt ist jetzt «Vielleicht»',
+            `${user.name} (Familie ${familyName(user.familyId)}) hat ${start.slice(0, 4)} Priorität und hat ${formatRange(start, end)} gebucht. ` +
+            `Dein Aufenthalt ${formatRange(b.start, b.end)} ist jetzt «Vielleicht» – er wird wieder bestätigt, falls ${user.name} storniert.`)
         }
       }
       if (needCar) await api.createCarBooking({ start: cs, end: ce, reservationId: r.id, note: undefined })
@@ -81,27 +82,27 @@ export function StayForm() {
 
   return (
     <>
-      <Header title={existing ? 'Edit stay' : 'Book a stay'} back />
+      <Header title={existing ? 'Aufenthalt bearbeiten' : 'Aufenthalt buchen'} back />
       <form className="page form" onSubmit={submit}>
         <div className="grid2">
-          <label>Arrival<input type="date" value={start} min={existing ? undefined : today()} onChange={(e) => {
+          <label>Anreise<input type="date" value={start} min={existing ? undefined : today()} onChange={(e) => {
             setStart(e.target.value)
             if (e.target.value >= end) setEnd(addDays(e.target.value, 1))
           }} required /></label>
-          <label>Departure<input type="date" value={end} min={addDays(start, 1)} onChange={(e) => setEnd(e.target.value)} required /></label>
+          <label>Abreise<input type="date" value={end} min={addDays(start, 1)} onChange={(e) => setEnd(e.target.value)} required /></label>
         </div>
-        {validDates && <p className="small muted">{nights} night{nights === 1 ? '' : 's'}</p>}
+        {validDates && <p className="small muted">{nights} {nights === 1 ? 'Nacht' : 'Nächte'}</p>}
 
-        <label>How many people (including you)?
+        <label>Wie viele Personen (inklusive dir)?
           <div className="stepper">
-            <button type="button" onClick={() => setPeople(Math.max(1, people - 1))} aria-label="Fewer">−</button>
+            <button type="button" onClick={() => setPeople(Math.max(1, people - 1))} aria-label="Weniger">−</button>
             <strong>{people}</strong>
-            <button type="button" onClick={() => setPeople(people + 1)} aria-label="More">+</button>
+            <button type="button" onClick={() => setPeople(people + 1)} aria-label="Mehr">+</button>
           </div>
         </label>
 
         <fieldset>
-          <legend>Rooms</legend>
+          <legend>Zimmer</legend>
           {roomsByArea(data.rooms).map(([area, rooms]) => (
             <div key={area}>
               {area && <p className="room-area">{area}</p>}
@@ -114,7 +115,7 @@ export function StayForm() {
                       className={'room' + (on ? ' on' : '') + (taken ? ' taken' : '')} onClick={() => toggleRoom(room.id)}>
                       <strong>{room.name}</strong>
                       <span className="small">
-                        {taken ? 'Booked by someone' : `${room.beds} bed${room.beds === 1 ? '' : 's'}`}{room.code ? ` · ${room.code}` : ''}
+                        {taken ? 'Schon gebucht' : `${room.beds} ${room.beds === 1 ? 'Bett' : 'Betten'}`}{room.code ? ` · ${room.code}` : ''}
                       </span>
                     </button>
                   )
@@ -123,47 +124,47 @@ export function StayForm() {
             </div>
           ))}
           {roomIds.length > 0 && people > beds && (
-            <p className="small warn-text">{people} people but only {beds} beds selected.</p>
+            <p className="small warn-text">{people} Personen, aber nur {beds} {beds === 1 ? 'Bett' : 'Betten'} gewählt.</p>
           )}
           {conflicts.map((c) => (
             <p key={c.id} className={'small ' + (blocked ? 'error' : 'warn-text')}>
-              Taken by {name(c.userId)} ({formatRange(c.start, c.end)})
+              Belegt von {name(c.userId)} ({formatRange(c.start, c.end)})
             </p>
           ))}
         </fieldset>
 
         {!existing && plan.kind === 'claim' && (
           <p className="info small">
-            ⭐ <strong>Your family has priority in {start.slice(0, 4)}.</strong> Booking moves the stays above to "maybe".
-            You then have {CLAIM_FREE_DAYS / 7} weeks to cancel for free – after that you pay even if you don't go.
+            ⭐ <strong>Deine Familie hat {start.slice(0, 4)} Priorität.</strong> Die Buchungen oben werden auf «Vielleicht» gesetzt.
+            Danach kannst du {weeks} Wochen lang gratis stornieren – später bezahlst du auch, wenn du nicht gehst.
           </p>
         )}
         {!existing && plan.kind === 'maybe' && (
           <p className="info small warn-text">
-            These rooms are taken, so your stay will be <strong>"maybe"</strong>. It becomes confirmed automatically if the
-            other stay is cancelled. {priorityId && `(Family ${familyName(priorityId)} has priority in ${start.slice(0, 4)}.)`}
+            Diese Zimmer sind belegt, deshalb wird dein Aufenthalt <strong>«Vielleicht»</strong>. Er wird automatisch bestätigt,
+            wenn der andere Aufenthalt storniert wird. {priorityId && `(Familie ${familyName(priorityId)} hat ${start.slice(0, 4)} Priorität.)`}
           </p>
         )}
 
-        <label>Occasion / party (optional)
-          <input value={occasion} onChange={(e) => setOccasion(e.target.value)} placeholder="e.g. Birthday, hunting weekend" />
+        <label>Anlass / Fest (optional)
+          <input value={occasion} onChange={(e) => setOccasion(e.target.value)} placeholder="z. B. Geburtstag, Jagdwochenende" />
         </label>
-        <label>Note (optional)<textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} /></label>
+        <label>Notiz (optional)<textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} /></label>
 
         {!existing && (
           <fieldset>
             <label className="check">
               <input type="checkbox" checked={needCar} onChange={(e) => setNeedCar(e.target.checked)} />
-              I need the car ({carOwnerName(data.profiles)} will be notified)
+              Ich brauche das Auto ({carOwnerName(data.profiles)} wird benachrichtigt)
             </label>
             {needCar && (
               <>
                 <div className="grid2">
-                  <label>From<input type="date" value={cs} onChange={(e) => setCarStart(e.target.value)} /></label>
-                  <label>To<input type="date" value={ce} min={cs} onChange={(e) => setCarEnd(e.target.value)} /></label>
+                  <label>Von<input type="date" value={cs} onChange={(e) => setCarStart(e.target.value)} /></label>
+                  <label>Bis<input type="date" value={ce} min={cs} onChange={(e) => setCarEnd(e.target.value)} /></label>
                 </div>
                 {carClash.map((b) => (
-                  <p key={b.id} className="small warn-text">Car already booked by {name(b.userId)} ({formatRange(b.start, b.end)})</p>
+                  <p key={b.id} className="small warn-text">Das Auto ist schon von {name(b.userId)} gebucht ({formatRange(b.start, b.end)})</p>
                 ))}
               </>
             )}
@@ -172,13 +173,13 @@ export function StayForm() {
 
         {validDates && !existing && plan.kind === 'free' && (
           <p className="info small">
-            Cancelling is free as long as nobody else is waiting for these dates. If someone is, it's free until
-            {' '}<strong>{formatDay(deadline, true)}</strong> ({data.settings.freeCancelMonths} months before arrival); after that it counts toward your costs.
+            Stornieren ist gratis, solange niemand sonst auf diese Daten wartet. Wenn jemand wartet, ist es gratis bis
+            {' '}<strong>{formatDay(deadline, true)}</strong> ({data.settings.freeCancelMonths} Monate vor der Anreise); danach zählt es zu deinen Kosten.
           </p>
         )}
 
         <button className="btn primary" disabled={saving || blocked}>
-          {existing ? 'Save changes' : plan.kind === 'maybe' ? 'Book as "maybe"' : plan.kind === 'claim' ? 'Book with priority' : 'Book stay'}
+          {existing ? 'Änderungen speichern' : plan.kind === 'maybe' ? 'Als «Vielleicht» buchen' : plan.kind === 'claim' ? 'Mit Priorität buchen' : 'Aufenthalt buchen'}
         </button>
       </form>
     </>

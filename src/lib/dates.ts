@@ -43,8 +43,11 @@ export function overlaps(aStart: string, aEnd: string, bStart: string, bEnd: str
   return aStart < bEnd && bStart < aEnd
 }
 
-const fmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' })
-const fmtYear = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+/** All dates and numbers are shown in Swiss German, e.g. "13. Nov. 2026". */
+export const LOCALE = 'de-CH'
+
+const fmt = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short', timeZone: 'UTC' })
+const fmtYear = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 
 export function formatDay(day: string, withYear = false): string {
   return (withYear ? fmtYear : fmt).format(toDate(day))
@@ -57,9 +60,10 @@ export function formatRange(start: string, end: string): string {
 
 export function timeAgo(iso: string): string {
   const s = (Date.now() - new Date(iso).getTime()) / 1000
-  if (s < 60) return 'just now'
-  if (s < 3600) return `${Math.floor(s / 60)} min ago`
-  if (s < 86400) return `${Math.floor(s / 3600)} h ago`
-  if (s < 86400 * 30) return `${Math.floor(s / 86400)} d ago`
-  return new Date(iso).toLocaleDateString()
+  if (s < 60) return 'gerade eben'
+  if (s < 3600) return `vor ${Math.floor(s / 60)} Min.`
+  if (s < 86400) return `vor ${Math.floor(s / 3600)} Std.`
+  if (s < 86400 * 2) return 'gestern'
+  if (s < 86400 * 30) return `vor ${Math.floor(s / 86400)} Tagen`
+  return new Date(iso).toLocaleDateString(LOCALE)
 }

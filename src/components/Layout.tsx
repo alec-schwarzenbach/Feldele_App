@@ -3,11 +3,11 @@ import { Icon } from './ui'
 import { useData } from '../lib/store'
 
 const TABS = [
-  { to: '/', icon: 'home', label: 'Home' },
-  { to: '/stays', icon: 'bed', label: 'Stays' },
-  { to: '/car', icon: 'car', label: 'Car' },
-  { to: '/fishing', icon: 'fish', label: 'Fishing' },
-  { to: '/board', icon: 'board', label: 'Board' },
+  { to: '/', icon: 'home', label: 'Start' },
+  { to: '/stays', icon: 'bed', label: 'Aufenthalte' },
+  { to: '/car', icon: 'car', label: 'Auto' },
+  { to: '/fishing', icon: 'fish', label: 'Fischen' },
+  { to: '/board', icon: 'board', label: 'Pinnwand' },
 ]
 
 export function Layout() {

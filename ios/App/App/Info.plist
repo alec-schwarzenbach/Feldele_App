@@ -5,7 +5,7 @@
   <key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>en</string>
+	<string>de</string>
 	<key>CFBundleDisplayName</key>
         <string>Feldele</string>
 	<key>CFBundleExecutable</key>
@@ -44,11 +44,11 @@
     </dict>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Feldele uses your location to mark where you caught a fish.</string>
+	<string>Feldele braucht deinen Standort, um zu markieren, wo du einen Fisch gefangen hast.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Feldele uses the camera to take photos of catches and posts.</string>
+	<string>Feldele braucht die Kamera für Fotos von Fängen und Beiträgen.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Feldele lets you add photos of catches and posts from your library.</string>
+	<string>Feldele kann Fotos aus deiner Mediathek zu Fängen und Beiträgen hinzufügen.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

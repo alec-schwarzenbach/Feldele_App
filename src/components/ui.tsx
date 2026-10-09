@@ -40,7 +40,7 @@ export function Header({ title, back, action }: { title: string; back?: boolean;
   return (
     <header className="header">
       {back ? (
-        <button className="icon-btn" onClick={() => nav(-1)} aria-label="Back"><Icon name="back" /></button>
+        <button className="icon-btn" onClick={() => nav(-1)} aria-label="Zurück"><Icon name="back" /></button>
       ) : <span className="header-spacer" />}
       <h1>{title}</h1>
       {action ?? <span className="header-spacer" />}
@@ -74,7 +74,7 @@ export function Stars({ value, onChange }: { value?: number; onChange?: (v: numb
     <span className={'stars' + (onChange ? ' editable' : '')}>
       {[1, 2, 3, 4, 5].map((n) => (
         <button key={n} type="button" disabled={!onChange} className={n <= (value ?? 0) ? 'on' : ''}
-          onClick={() => onChange?.(value === n ? undefined : n)} aria-label={`${n} stars`}>★</button>
+          onClick={() => onChange?.(value === n ? undefined : n)} aria-label={`${n} Sterne`}>★</button>
       ))}
     </span>
   )
@@ -112,12 +112,12 @@ export function PhotoPicker({ value, onChange }: { value?: string; onChange: (ur
       {value ? (
         <div className="photo-preview">
           <img src={value} alt="" />
-          <button type="button" className="btn small ghost" onClick={() => onChange(undefined)}>Remove photo</button>
+          <button type="button" className="btn small ghost" onClick={() => onChange(undefined)}>Foto entfernen</button>
         </div>
       ) : (
         <label className="photo-drop">
           <Icon name="camera" size={28} />
-          <span>{busy ? 'Uploading…' : 'Add photo'}</span>
+          <span>{busy ? 'Wird hochgeladen…' : 'Foto hinzufügen'}</span>
           <input type="file" accept="image/*" hidden onChange={(e) => pick(e.target.files?.[0])} />
         </label>
       )}
