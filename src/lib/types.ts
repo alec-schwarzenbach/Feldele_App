@@ -17,17 +17,23 @@ export interface Profile {
   familyId?: string
 }
 
-/** Families share priority. Any member can add one. */
+/** The two houses. Feldele is shared by everyone; Waldele only by the clans allowed in settings. */
+export type House = 'feldele' | 'waldele'
+export const HOUSES: Record<House, string> = { feldele: 'Feldele', waldele: 'Waldele' }
+/** Data from before there were two houses has no house field: it belongs to Feldele. */
+export const houseOf = (x: { house?: House }): House => x.house ?? 'feldele'
+
+/** The names people pick when signing up. Set up by the owner; members can't add their own. */
 export interface Family {
   id: string
   name: string
-  /** The clan that pays for this family; without a clan the family pays itself. Set by the owner. */
+  /** The clan that pays for this family. Only the owner sees clans. */
   clanId?: string
   createdBy?: string
   createdAt?: string
 }
 
-/** Several families that pay the yearly costs together. */
+/** Several families that pay the yearly costs together. Never shown to regular members. */
 export interface Clan {
   id: string
   name: string
@@ -38,6 +44,7 @@ export interface ShoppingItem {
   id: string
   userId: string
   text: string
+  house?: House
   done?: boolean
   doneBy?: string
   createdAt: string
@@ -47,6 +54,7 @@ export interface Room {
   id: string
   name: string
   beds: number
+  house?: House
   /** Where in the house, e.g. DG, OG, Jägerwohnung */
   area?: string
   /** Short form, e.g. DG-Az */
@@ -61,6 +69,8 @@ export type ReservationStatus = 'active' | 'tentative' | 'cancelled'
 export interface Reservation {
   id: string
   userId: string
+  /** Which house; missing = Feldele */
+  house?: House
   /** Arrival day, YYYY-MM-DD */
   start: string
   /** Departure day, YYYY-MM-DD (not counted as a night) */
@@ -164,6 +174,8 @@ export interface Settings {
   /** Priority rotation of family ids: priorityOrder[0] has priority in priorityStartYear, the next family the year after, and so on (repeating). */
   priorityOrder: string[]
   priorityStartYear: number
+  /** Clans whose families may also use Waldele (they see a house switch, Waldele first). */
+  waldeleClanIds: string[]
 }
 
 export const isAdmin = (p: Pick<Profile, 'role'>) => p.role === 'admin' || p.role === 'owner'

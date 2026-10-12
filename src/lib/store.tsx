@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api } from './api'
+import { canUseWaldele, defaultHouse } from './rules'
 import type {
   AppNotification,
   CarBooking,
@@ -8,6 +9,7 @@ import type {
   Comment,
   CostEntry,
   Family,
+  House,
   Post,
   Profile,
   Reservation,
@@ -47,6 +49,11 @@ interface Store {
   familyName: (familyId: string | undefined) => string
   /** Call after the signed-in user's own profile changed (e.g. family chosen) */
   refreshUser: () => Promise<void>
+  /** The houses this user may use (Waldele only for its clans) */
+  houses: House[]
+  /** The house shown in Stays and the shopping list */
+  house: House
+  setHouse: (h: House) => void
 }
 
 const Ctx = createContext<Store | null>(null)
@@ -126,7 +133,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setUser(await api.currentUser())
   }, [])
 
-  return <Ctx.Provider value={{ user, authReady, data, reload, mutate, name, familyName, refreshUser }}>{children}</Ctx.Provider>
+  // Which house is shown. Waldele people start in Waldele; the last choice is remembered on this device.
+  const houses: House[] = user && data && canUseWaldele(user, data.families, data.settings) ? ['waldele', 'feldele'] : ['feldele']
+  const [chosenHouse, setChosenHouse] = useState<House | null>(null)
+  const remembered = (() => {
+    try {
+      return user ? (localStorage.getItem(`feldele-house-${user.id}`) as House | null) : null
+    } catch {
+      return null
+    }
+  })()
+  const preferred = chosenHouse ?? remembered ?? (user && data ? defaultHouse(user, data.families, data.settings) : 'feldele')
+  const house: House = houses.includes(preferred) ? preferred : 'feldele'
+  const setHouse = useCallback((h: House) => {
+    setChosenHouse(h)
+    try {
+      if (user) localStorage.setItem(`feldele-house-${user.id}`, h)
+    } catch {
+      /* private mode */
+    }
+  }, [user])
+
+  return <Ctx.Provider value={{ user, authReady, data, reload, mutate, name, familyName, refreshUser, houses, house, setHouse }}>{children}</Ctx.Provider>
 }
 
 export function useStore() {

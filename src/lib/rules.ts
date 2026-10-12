@@ -1,5 +1,6 @@
 import { addDays, addMonths, nightsBetween, nightsInYear, overlaps, today } from './dates'
-import type { CarBooking, Clan, CostEntry, Family, Profile, Reservation, Room, Settings } from './types'
+import type { CarBooking, Clan, CostEntry, Family, House, Profile, Reservation, Room, Settings } from './types'
+import { houseOf } from './types'
 
 /** Days a priority user has to cancel for free after taking over someone else's dates. */
 export const CLAIM_FREE_DAYS = 28
@@ -21,19 +22,34 @@ export const stayYear = (r: Pick<Reservation, 'start'>) => Number(r.start.slice(
 
 const familyOf = (userId: string, profiles: Profile[]) => profiles.find((p) => p.id === userId)?.familyId
 
-/** Reservations with the given statuses that share a room with the draft in the same period. */
-export function roomConflicts(
-  all: Reservation[],
-  draft: { id?: string; start: string; end: string; roomIds: string[] },
-  statuses: Reservation['status'][] = ['active'],
-): Reservation[] {
+type Draft = { id?: string; start: string; end: string; roomIds: string[]; house?: House }
+
+/**
+ * Reservations with the given statuses in the same house and period that share a room
+ * with the draft. A stay without rooms books the whole house (used while a house has
+ * no rooms set up), so it clashes with every other stay there.
+ */
+export function roomConflicts(all: Reservation[], draft: Draft, statuses: Reservation['status'][] = ['active']): Reservation[] {
   return all.filter(
     (r) =>
       statuses.includes(r.status) &&
       r.id !== draft.id &&
+      houseOf(r) === houseOf(draft) &&
       overlaps(r.start, r.end, draft.start, draft.end) &&
-      r.roomIds.some((id) => draft.roomIds.includes(id)),
+      (!r.roomIds.length || !draft.roomIds.length || r.roomIds.some((id) => draft.roomIds.includes(id))),
   )
+}
+
+/** Members of the clans listed in settings.waldeleClanIds may also use Waldele; the owner always can. */
+export function canUseWaldele(user: Profile, families: Family[], settings: Settings): boolean {
+  if (user.role === 'owner') return true
+  const clanId = families.find((f) => f.id === user.familyId)?.clanId
+  return !!clanId && settings.waldeleClanIds.includes(clanId)
+}
+
+/** Waldele people start in Waldele and switch to Feldele when they want to stay there. */
+export function defaultHouse(user: Profile, families: Family[], settings: Settings): House {
+  return user.role !== 'owner' && canUseWaldele(user, families, settings) ? 'waldele' : 'feldele'
 }
 
 /** Other people's "maybe" stays that are waiting for this stay's rooms. */
@@ -51,7 +67,7 @@ export type BookingPlan =
   | { kind: 'own'; conflicts: Reservation[] }
 
 export function planBooking(
-  draft: { id?: string; start: string; end: string; roomIds: string[] },
+  draft: Draft,
   all: Reservation[],
   settings: Settings,
   userId: string,

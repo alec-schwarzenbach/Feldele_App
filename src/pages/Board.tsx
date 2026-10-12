@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Avatar, Empty, Fab, Header, Icon, PhotoPicker, Segmented, Stars } from '../components/ui'
+import { Avatar, Empty, Fab, Header, HouseSwitch, Icon, PhotoPicker, Segmented, Stars } from '../components/ui'
 import { api } from '../lib/api'
 import { timeAgo } from '../lib/dates'
 import { useData } from '../lib/store'
-import { isAdmin, type PostCategory } from '../lib/types'
+import { HOUSES, houseOf, isAdmin, type PostCategory } from '../lib/types'
 
 const CATEGORIES: { value: PostCategory; label: string; emoji: string }[] = [
   { value: 'tip', label: 'Tipp', emoji: '💡' },
@@ -20,8 +20,8 @@ type Tab = 'posts' | 'shopping'
 export function Board() {
   const [params, setParams] = useSearchParams()
   const tab: Tab = params.get('tab') === 'shopping' ? 'shopping' : 'posts'
-  const { data } = useData()
-  const open = data.shopping.filter((s) => !s.done).length
+  const { data, house } = useData()
+  const open = data.shopping.filter((s) => !s.done && houseOf(s) === house).length
 
   return (
     <>
@@ -75,22 +75,23 @@ function Posts() {
 
 /** What the next visitors should buy. Anyone adds items and ticks them off when bought. */
 function ShoppingList() {
-  const { data, mutate, name } = useData()
+  const { data, mutate, name, house } = useData()
   const [text, setText] = useState('')
-  const items = [...data.shopping].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  const items = data.shopping.filter((s) => houseOf(s) === house).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   const open = items.filter((s) => !s.done)
   const done = items.filter((s) => s.done)
 
   async function add(e: FormEvent) {
     e.preventDefault()
     if (!text.trim()) return
-    await mutate(() => api.addShopping(text))
+    await mutate(() => api.addShopping(text, house))
     setText('')
   }
 
   return (
     <>
-      <p className="small muted">Was die nächsten Besucher einkaufen sollen. Abhaken, sobald es gekauft ist.</p>
+      <HouseSwitch />
+      <p className="small muted">Was die nächsten Besucher im {HOUSES[house]} einkaufen sollen. Abhaken, sobald es gekauft ist.</p>
       <form className="comment-form" onSubmit={add}>
         <input value={text} onChange={(e) => setText(e.target.value)} placeholder="z. B. Kaffee, Abwaschmittel…" maxLength={200} />
         <button className="btn primary small">Hinzufügen</button>

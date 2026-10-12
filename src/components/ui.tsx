@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { colorFor } from '../lib/colors'
 import { resizeImage } from '../lib/photo'
 import { api } from '../lib/api'
+import { useStore } from '../lib/store'
+import { HOUSES } from '../lib/types'
 
 const ICONS: Record<string, string> = {
   home: 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z',
@@ -123,4 +125,11 @@ export function PhotoPicker({ value, onChange }: { value?: string; onChange: (ur
       )}
     </div>
   )
+}
+
+/** Waldele | Feldele switch – only shown to people who may use both houses. */
+export function HouseSwitch() {
+  const { houses, house, setHouse } = useStore()
+  if (houses.length < 2) return null
+  return <Segmented value={house} onChange={setHouse} options={houses.map((h) => ({ value: h, label: `🏠 ${HOUSES[h]}` }))} />
 }

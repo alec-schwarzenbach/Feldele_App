@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // Photos (catches, board posts): approved members can see them,
-// and everyone uploads only into their own folder.
+// everyone uploads only into their own folder. Yearly bills: owner and admins.
 service firebase.storage {
   match /b/{bucket}/o {
     function approved() {
@@ -15,6 +15,12 @@ service firebase.storage {
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
       allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Yearly bills (Excel): only the owner and admins.
+    match /reports/{file} {
+      allow read, write: if request.auth != null
+        && firestore.get(/databases/(default)/documents/profiles/$(request.auth.uid)).data.role in ['owner', 'admin'];
     }
   }
 }

@@ -25,9 +25,10 @@ With no Firebase config the app runs in **demo mode**. Data is stored only in th
 | **Car** | Calendar of car bookings, tied to a stay or on their own. Every booking notifies the car owner, Günter Kobalt, and nobody else. |
 | **Fishing** | Map of catches with species, length, weight, reason (starving / injured), bait, photo and date. Live GPS: the pin follows your position, or tap the map to set it by hand. |
 | **Board** | Tips, trips, reviews and restaurants with star ratings, photos and comments. Authors can edit and delete their own posts. Second tab: **shopping list** for the next visitors (add, tick off, clear). |
-| **Costs & usage (admins only)** | For each year: what each clan (or family without a clan) owes, with families and members underneath. Costs are split by person-nights (1 person × 1 night = 1). Download as a formatted **Excel** file (Übersicht, Details, Kosten). |
-| **Families** | Right after signing up, everyone must choose their family (or add it if it is missing), or "no family" for people who don't pay (cleaner, car owner). Priority is per family. Admins can rename families and move members between them. |
-| **Clans (owner)** | Groups of families that pay together. The owner creates clans and assigns families; families without a clan pay themselves. |
+| **Yearly bill (owner)** | No costs page in the app. Under Profil → Jahresabrechnung the owner enters the costs and creates the Excel (grouped by clan, with stays per clan and a Waldele sheet). The file is stored in Firebase Storage (`reports/`) and shown only as a link. |
+| **Families** | Right after signing up, everyone picks their name/family from the owner's list (or "no family" for the cleaner and car owner). Members cannot add families. The list is set up with `node scripts/setup-families.cjs` and managed by the owner under Profil → Clans & Familien. |
+| **Clans (owner only)** | Groups of families that pay together. Never shown to members. |
+| **Two houses** | Feldele for everyone; **Waldele** only for the clans marked "Darf auch Waldele nutzen" (clan Alfred Schwarzenbach). They get a Waldele / Feldele switch in Stays and the shopping list, starting in Waldele. A house without rooms is booked as a whole. |
 | **Push notifications** | Real push on Android (app) and in the browser / iPhone home-screen app. Sent by the server functions in [functions/index.js](functions/index.js): every in-app notification, plus for the **cleaner**: new or cancelled stays and a reminder at 08:00 the day before each arrival. |
 | **Language** | The whole app is in German (de-CH dates and numbers). |
 | **Settings (admin)** | Rooms, house name and location, free-cancellation months, currency. |

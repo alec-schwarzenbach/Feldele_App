@@ -6,6 +6,7 @@ import type {
   Comment,
   CostEntry,
   Family,
+  House,
   Post,
   Profile,
   Reservation,
@@ -17,6 +18,13 @@ import { createLocalApi } from './localApi'
 import { createFirebaseApi } from './firebaseApi'
 
 export type PushState = 'on' | 'off' | 'denied' | 'unsupported'
+
+/** A saved yearly bill in Firebase Storage. */
+export interface YearReportFile {
+  year: number
+  url: string
+  createdAt: string
+}
 
 export type New<T> = Omit<T, 'id' | 'createdAt' | 'updatedAt' | 'userId'>
 
@@ -45,13 +53,14 @@ export interface Api {
   /** Owner only: which clan a family pays with (undefined = the family pays itself). */
   setFamilyClan(familyId: string, clanId: string | undefined): Promise<void>
 
+  /** Only the owner and admins can read clans (regular members never see them). */
   listClans(): Promise<Clan[]>
   addClan(name: string): Promise<void>
   renameClan(id: string, name: string): Promise<void>
   deleteClan(id: string): Promise<void>
 
   listShopping(): Promise<ShoppingItem[]>
-  addShopping(text: string): Promise<void>
+  addShopping(text: string, house: House): Promise<void>
   setShoppingDone(id: string, done: boolean): Promise<void>
   deleteShopping(id: string): Promise<void>
 
@@ -98,6 +107,14 @@ export interface Api {
   listComments(postId?: string): Promise<Comment[]>
   addComment(postId: string, body: string): Promise<void>
   deleteComment(id: string): Promise<void>
+
+  /**
+   * Saves the yearly bill (Excel, grouped by clan) in Firebase Storage and
+   * returns a link to the file. Owner and admins only.
+   */
+  saveYearReport(year: number, file: Blob): Promise<YearReportFile>
+  /** The saved yearly bills, newest year first. */
+  listYearReports(): Promise<YearReportFile[]>
 
   listCosts(): Promise<CostEntry[]>
   addCost(c: Omit<CostEntry, 'id'>): Promise<void>

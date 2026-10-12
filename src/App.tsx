@@ -1,7 +1,6 @@
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { useStore } from './lib/store'
-import { isAdmin } from './lib/types'
 import { Board, PostDetail, PostForm } from './pages/Board'
 import { Car, CarForm } from './pages/Car'
 import { CatchForm, Fishing } from './pages/Fishing'
@@ -9,7 +8,6 @@ import { Home } from './pages/Home'
 import { ChooseFamily } from './pages/ChooseFamily'
 import { Login, Pending } from './pages/Login'
 import { Profile } from './pages/Profile'
-import { Report } from './pages/Report'
 import { StayDetail } from './pages/StayDetail'
 import { StayForm } from './pages/StayForm'
 import { Stays } from './pages/Stays'
@@ -42,8 +40,6 @@ export default function App() {
           <Route path="board/new" element={<PostForm />} />
           <Route path="board/:id" element={<PostDetail />} />
           <Route path="board/:id/edit" element={<PostForm />} />
-          {/* Costs and amounts owed are for admins only */}
-          <Route path="report" element={isAdmin(user) ? <Report /> : <Navigate to="/" replace />} />
           <Route path="profile" element={<Profile />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

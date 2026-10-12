@@ -27,7 +27,7 @@ import {
   type QuerySnapshot,
 } from 'firebase/firestore'
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage'
-import type { Api } from './api'
+import type { Api, YearReportFile } from './api'
 import { formatDay } from './dates'
 import type { AppNotification, CarBooking, Clan, Family, Post, Profile, Reservation, Room, Settings, ShoppingItem } from './types'
 import { isAdmin } from './types'
@@ -46,7 +46,7 @@ export interface FirebaseConfig {
 
 const DEFAULT_SETTINGS: Settings = {
   freeCancelMonths: 4, currency: 'EUR', lodgeName: 'Feldele', lodgeLat: 47.505, lodgeLng: 14.0,
-  priorityOrder: [], priorityStartYear: new Date().getFullYear(),
+  priorityOrder: [], priorityStartYear: new Date().getFullYear(), waldeleClanIds: [],
 }
 
 const now = () => new Date().toISOString()
@@ -133,7 +133,12 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
     deleteFamily: (id) => remove('families', id),
     setFamilyClan: (familyId, clanId) => update('families', familyId, { clanId }),
 
-    listClans: async () => (await list<Clan>('clans')).sort((a, b) => a.name.localeCompare(b.name)),
+    async listClans() {
+      // Clans are hidden from regular members; the rules would reject them anyway.
+      const me = await profileFor(auth.currentUser?.uid)
+      if (!me || !isAdmin(me)) return []
+      return (await list<Clan>('clans')).sort((a, b) => a.name.localeCompare(b.name))
+    },
     async addClan(name) {
       await addDoc(col('clans'), { name: name.trim(), createdAt: now() })
     },
@@ -141,8 +146,8 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
     deleteClan: (id) => remove('clans', id),
 
     listShopping: () => list<ShoppingItem>('shopping'),
-    async addShopping(text) {
-      await addDoc(col('shopping'), { text: text.trim(), userId: myId(), done: false, createdAt: now() })
+    async addShopping(text, house) {
+      await addDoc(col('shopping'), { text: text.trim(), house, userId: myId(), done: false, createdAt: now() })
     },
     setShoppingDone: (id, done) => update('shopping', id, { done, doneBy: done ? myId() : undefined }),
     deleteShopping: (id) => remove('shopping', id),
@@ -261,6 +266,20 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
       await addDoc(col('comments'), { postId, body, userId: myId(), createdAt: now() })
     },
     deleteComment: (id) => remove('comments', id),
+
+    async saveYearReport(year, file) {
+      // The Excel goes to Storage (reports/), the link to Firestore (yearReports/{year}).
+      const r = ref(storage, `reports/Feldele-Abrechnung-${year}.xlsx`)
+      await uploadBytes(r, file, { contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const saved = { year, url: await getDownloadURL(r), createdAt: now() }
+      await setDoc(doc(db, 'yearReports', String(year)), { ...saved, createdBy: myId() })
+      return saved
+    },
+    async listYearReports() {
+      const me = await profileFor(auth.currentUser?.uid)
+      if (!me || !isAdmin(me)) return []
+      return (await list<YearReportFile>('yearReports')).sort((a, b) => b.year - a.year)
+    },
 
     async listCosts() {
       // Only admins may read costs; the rules would reject anyone else.

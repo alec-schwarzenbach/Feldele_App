@@ -14,7 +14,7 @@ const now = new Date().toISOString()
 
 const SETTINGS = {
   freeCancelMonths: 4, currency: 'EUR', lodgeName: 'Feldele', lodgeLat: 47.505, lodgeLng: 14.0,
-  priorityOrder: [], priorityStartYear: new Date().getFullYear(),
+  priorityOrder: [], priorityStartYear: new Date().getFullYear(), waldeleClanIds: [],
 }
 
 const ROOMS = [
@@ -32,16 +32,16 @@ const ROOMS = [
 
 const EXAMPLES = {
   families: {
-    _about: 'A family. Members choose (or add) their family after signing up. Priority is per family (settings/main.priorityOrder lists family ids). clanId: the clan that pays for this family (set by the owner); without it the family pays itself.',
+    _about: 'A name people pick when signing up (only the owner adds them, see scripts/setup-families.cjs). Priority is per family (settings/main.priorityOrder lists family ids). clanId: the clan that pays for this family (set by the owner); without it the family pays itself.',
     name: 'Example family', clanId: '(clan id)', createdBy: '(profile id)', createdAt: now,
   },
   clans: {
-    _about: 'Several families that pay the yearly costs together. Only the owner creates clans and assigns families (families.clanId).',
+    _about: 'Several families that pay the yearly costs together. Only the owner sees and manages clans. settings/main.waldeleClanIds = clans that may also use Waldele.',
     name: 'Example clan', createdAt: now,
   },
   shopping: {
     _about: 'Shopping list on the board: what the next visitors should buy. done = bought, doneBy = who bought it.',
-    text: 'Kaffee', userId: '(profile id)', done: false, createdAt: now,
+    text: 'Kaffee', house: 'feldele', userId: '(profile id)', done: false, createdAt: now,
   },
   profiles: {
     _about: 'One document per login; the document id is the Firebase Auth user id. role: owner | admin | member | car_keeper (car owner) | cleaner (gets push about stays) | pending. familyId: the family (see families), or _none for people outside the families (cleaner, car owner), chosen right after sign-up. New sign-ups are pending until the owner approves them.',
@@ -49,7 +49,7 @@ const EXAMPLES = {
   },
   reservations: {
     _about: 'A stay. start = arrival day, end = departure day (YYYY-MM-DD, end not counted as a night). people includes the member. status: active | tentative ("maybe": rooms taken, waiting) | cancelled. priorityClaim = booked by the priority user of that year over someone else; free to cancel until claimDeadline (4 weeks), then binding. bumpedBy = for a "maybe" stay, the stay that pushed it out. lateCancel = cancelled when it already cost something, still counts in the cost split.',
-    userId: '(profile id)', start: '2027-01-15', end: '2027-01-18', people: 4, roomIds: ['(room id)'],
+    userId: '(profile id)', house: 'feldele', start: '2027-01-15', end: '2027-01-18', people: 4, roomIds: ['(room id)'],
     occasion: 'Birthday party', note: 'Arriving late', status: 'active', priorityClaim: true, claimDeadline: '2026-11-05', createdAt: now,
   },
   carBookings: {

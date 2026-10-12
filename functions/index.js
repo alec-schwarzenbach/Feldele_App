@@ -82,6 +82,8 @@ export const stayChanged = onDocumentWritten('reservations/{id}', async (event) 
   const isActive = after?.status === 'active'
   if (wasActive === isActive) return
   const stay = isActive ? after : before
+  // The cleaner works in Feldele; Waldele stays don't concern her.
+  if (stay.house === 'waldele') return
   // Stays that are already over don't matter for cleaning.
   if (stay.end < new Date().toISOString().slice(0, 10)) return
   const { who, text } = await describeStay(stay)
@@ -94,7 +96,7 @@ export const cleanerReminder = onSchedule({ schedule: '0 8 * * *', timeZone: TIM
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE }).format(new Date(Date.now() + 86_400_000))
   const arrivals = await db.collection('reservations').where('start', '==', parts).where('status', '==', 'active').get()
   for (const doc of arrivals.docs) {
-    if (doc.id.startsWith('_')) continue
+    if (doc.id.startsWith('_') || doc.get('house') === 'waldele') continue
     const { who, text } = await describeStay(doc.data())
     await notifyCleaners(`Morgen kommt ${who}`, `Anreise morgen: ${who}, ${text}.`)
   }

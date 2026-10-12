@@ -1,4 +1,4 @@
-import type { Api } from './api'
+import type { Api, YearReportFile } from './api'
 import { addDays, formatDay, formatRange, today } from './dates'
 import type {
   AppNotification,
@@ -16,6 +16,7 @@ import type {
   ShoppingItem,
 } from './types'
 import { isAdmin, isOwner, NO_FAMILY } from './types'
+import { CLANS, FAMILIES, familyId, WALDELE_CLAN_IDS } from './families'
 import { priorityFamilyFor, stayYear } from './rules'
 
 // Demo backend: keeps everything in localStorage so the app can be tried
@@ -40,7 +41,8 @@ interface DB {
 
 const KEY = 'lodge-demo-db'
 const SESSION = 'lodge-demo-session'
-const VERSION = 6
+const VERSION = 7
+let demoReports: YearReportFile[] = []
 
 const uid = () => crypto.randomUUID()
 const now = () => new Date().toISOString()
@@ -61,18 +63,15 @@ function seed(): DB {
   return {
     version: VERSION,
     profiles: [
-      p('u-alec', 'Alec', 'alec@lodge.test', 'owner', 'f-schwarzenbach'),
-      p('u-maria', 'Maria', 'maria@lodge.test', 'member', 'f-huber'),
-      p('u-thomas', 'Thomas', 'thomas@lodge.test', 'member', 'f-gruber'),
+      p('u-alec', 'Alec', 'alec@lodge.test', 'owner', familyId('Alexis Schwarzenbach')),
+      p('u-maria', 'Maria', 'maria@lodge.test', 'member', familyId('Maria Specker')),
+      p('u-thomas', 'Thomas', 'thomas@lodge.test', 'member', familyId('Thomas Scott')),
+      p('u-chrisi', 'Chrisi', 'chrisi@lodge.test', 'member', familyId('Chrisi Schwarzenbach')),
       p('u-gunther', 'Günter Kobalt', 'guenther@lodge.test', 'car_keeper', NO_FAMILY),
       p('u-rosa', 'Rosa', 'rosa@lodge.test', 'cleaner', NO_FAMILY),
     ],
-    families: [
-      { id: 'f-schwarzenbach', name: 'Schwarzenbach' },
-      { id: 'f-huber', name: 'Huber', clanId: 'c-tal' },
-      { id: 'f-gruber', name: 'Gruber', clanId: 'c-tal' },
-    ],
-    clans: [{ id: 'c-tal', name: 'Clan Tal' }],
+    families: FAMILIES.map((f) => ({ ...f })),
+    clans: CLANS.map((c) => ({ ...c })),
     rooms: [
       { id: 'DG-Az', area: 'DG', name: 'Arvenzimmer', beds: 2, code: 'DG-Az' },
       { id: 'DG-EzS', area: 'DG', name: 'Einzelzimmer Süd', beds: 1, code: 'DG-EzS' },
@@ -92,6 +91,8 @@ function seed(): DB {
       res('res-4', 'u-alec', -10, 4, 3, ['J-DzO']),
       res('res-5', 'u-maria', 12, 4, 2, ['DG-Az']),
       res('res-6', 'u-thomas', 150, 7, 5, ['OG-Mz', 'J-DzO']),
+      res('res-w1', 'u-chrisi', 5, 3, 4, [], { house: 'waldele' }),
+      res('res-w2', 'u-chrisi', -25, 2, 2, [], { house: 'waldele' }),
     ],
     carBookings: [
       { id: 'car-1', userId: 'u-maria', reservationId: 'res-5', start: addDays(t, 12), end: addDays(t, 16), createdAt: now() },
@@ -134,6 +135,7 @@ function seed(): DB {
     shopping: [
       { id: uid(), userId: 'u-maria', text: 'Abwaschmittel', createdAt: now() },
       { id: uid(), userId: 'u-thomas', text: 'Anzündwürfel für den Ofen', createdAt: now() },
+      { id: uid(), userId: 'u-chrisi', text: 'Holz für den Kachelofen', house: 'waldele', createdAt: now() },
       { id: uid(), userId: 'u-alec', text: 'Kaffee', done: true, doneBy: 'u-maria', createdAt: now() },
     ],
     costs: [
@@ -144,7 +146,8 @@ function seed(): DB {
     ],
     settings: {
       freeCancelMonths: 4, currency: 'CHF', lodgeName: 'Feldele', lodgeLat: 47.505, lodgeLng: 14.0,
-      priorityOrder: ['f-huber', 'f-gruber', 'f-schwarzenbach'], priorityStartYear: y,
+      priorityOrder: [familyId('Maria Specker'), familyId('Thomas Scott'), familyId('Alexis Schwarzenbach')], priorityStartYear: y,
+      waldeleClanIds: WALDELE_CLAN_IDS,
     },
   }
 }
@@ -291,7 +294,7 @@ export function createLocalApi(): Api {
         else delete f.clanId
       }),
 
-    listClans: () => ok([...db.clans].sort((a, b) => a.name.localeCompare(b.name))),
+    listClans: () => ok(sessionUser() && isAdmin(sessionUser()!) ? [...db.clans].sort((a, b) => a.name.localeCompare(b.name)) : []),
     addClan: (name) =>
       change(() => {
         requireOwner()
@@ -309,7 +312,7 @@ export function createLocalApi(): Api {
       }),
 
     listShopping: () => ok(db.shopping),
-    addShopping: (text) => change(() => db.shopping.push({ id: uid(), userId: me().id, text: text.trim(), done: false, createdAt: now() })),
+    addShopping: (text, house) => change(() => db.shopping.push({ id: uid(), userId: me().id, text: text.trim(), house, done: false, createdAt: now() })),
     setShoppingDone: (id, done) =>
       change(() => Object.assign(db.shopping.find((s) => s.id === id)!, { done, doneBy: done ? me().id : undefined })),
     deleteShopping: (id) => change(() => (db.shopping = db.shopping.filter((s) => s.id !== id))),
@@ -413,6 +416,15 @@ export function createLocalApi(): Api {
     listComments: (postId) => ok(postId ? db.comments.filter((c) => c.postId === postId) : db.comments),
     addComment: (postId, body) => change(() => db.comments.push({ id: uid(), postId, body, userId: me().id, createdAt: now() })),
     deleteComment: (id) => change(() => (db.comments = db.comments.filter((c) => c.id !== id))),
+
+    // Demo: the file only lives in this browser tab (the real app stores it in Firebase Storage).
+    async saveYearReport(year, file) {
+      requireAdmin()
+      const saved = { year, url: URL.createObjectURL(file), createdAt: now() }
+      demoReports = [saved, ...demoReports.filter((r) => r.year !== year)]
+      return saved
+    },
+    listYearReports: () => Promise.resolve(sessionUser() && isAdmin(sessionUser()!) ? [...demoReports] : []),
 
     listCosts: () => ok(sessionUser() && isAdmin(sessionUser()!) ? db.costs : []),
     addCost: (c) => change(() => {

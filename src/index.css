@@ -279,3 +279,6 @@ legend { font-size: 0.85rem; font-weight: 600; color: var(--muted); padding: 0 4
 .assign-row select { width: auto; max-width: 60%; }
 .family-block { display: flex; flex-direction: column; gap: 2px; }
 .member-line.indent { padding-left: 24px; }
+.clan-block { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.clan-block .indent { padding-left: 12px; }
+.clan-block .family-select { width: auto; max-width: 120px; padding: 4px 6px; font-size: 13px; }

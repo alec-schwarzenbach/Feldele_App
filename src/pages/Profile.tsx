@@ -1,12 +1,14 @@
-import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState, type FormEvent } from 'react'
+
 import { PushPrompt } from '../components/PushPrompt'
 import { Avatar, Header, Icon } from '../components/ui'
-import { api } from '../lib/api'
+import { api, type YearReportFile } from '../lib/api'
+import { LOCALE, timeAgo } from '../lib/dates'
+import { buildYearWorkbook, COST_LABELS } from '../lib/excel'
 import { resetDemoData } from '../lib/localApi'
-import { priorityFamilyFor, roomLabel } from '../lib/rules'
+import { buildYearReport, priorityFamilyFor, roomLabel } from '../lib/rules'
 import { useData } from '../lib/store'
-import { isAdmin, isOwner, NO_FAMILY, type Clan, type Family, type Profile as Member, type Role } from '../lib/types'
+import { HOUSES, houseOf, isAdmin, isOwner, NO_FAMILY, type Clan, type CostCategory, type Family, type House, type Profile as Member, type Role } from '../lib/types'
 
 const ROLE_LABELS: Record<Role, string> = {
   owner: 'Besitzer', admin: 'Admin', member: 'Mitglied', car_keeper: 'Autobesitzer', cleaner: 'Cleaner (Reinigung)',
@@ -65,17 +67,9 @@ export function Profile() {
 
         <section className="card"><PushPrompt compact /></section>
 
-        {admin && (
-          <Link to="/report" className="card row link-card">
-            <Icon name="chart" />
-            <span className="grow"><strong>Kosten & Nutzung</strong><br /><span className="small muted">Nur für Admins · Excel-Abrechnung</span></span>
-            <Icon name="chevR" />
-          </Link>
-        )}
-
+        {owner && <YearlyBill />}
         {owner && <PrioritySettings />}
         {owner && <ClanSettings />}
-        {admin && <FamilySettings />}
 
         {admin && (
           <section className="card">
@@ -125,119 +119,215 @@ export function Profile() {
   )
 }
 
-/** Owner only: clans are groups of families that pay the yearly costs together. */
-function ClanSettings() {
+/**
+ * Owner only: the yearly bill. The Excel is built in the background, stored in
+ * Firebase Storage, and only shown as a link (no costs table in the app).
+ */
+function YearlyBill() {
   const { data, mutate } = useData()
-  const [newName, setNewName] = useState('')
-  const familiesOf = (c: Clan) => data.families.filter((f) => f.clanId === c.id)
+  const thisYear = new Date().getFullYear()
+  const years = [...new Set([thisYear, ...data.costs.map((c) => c.year), ...data.reservations.map((r) => Number(r.start.slice(0, 4)))])]
+    .filter((y) => y <= thisYear)
+    .sort((a, b) => b - a)
+  const [year, setYear] = useState(thisYear)
+  const [busy, setBusy] = useState(false)
+  const [files, setFiles] = useState<YearReportFile[]>()
+  const [category, setCategory] = useState<CostCategory>('rent')
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+  const cur = data.settings.currency
+  const money = (n: number) => n.toLocaleString(LOCALE, { style: 'currency', currency: cur })
+  const costs = data.costs.filter((c) => c.year === year)
 
-  async function add(e: FormEvent) {
+  useEffect(() => {
+    api.listYearReports().then(setFiles).catch(() => setFiles([]))
+  }, [])
+
+  async function createExcel() {
+    setBusy(true)
+    try {
+      // Only Feldele stays are billed; Waldele stays go into their own sheet.
+      const feldele = data.reservations.filter((r) => houseOf(r) === 'feldele')
+      const report = buildYearReport(year, data.profiles, data.families, data.clans, feldele, data.costs)
+      const blob = await buildYearWorkbook(report, data.costs, cur, data.settings.lodgeName, {
+        stays: data.reservations.filter((r) => houseOf(r) === 'waldele'),
+        who: (id) => data.profiles.find((p) => p.id === id)?.name ?? 'Unbekannt',
+      })
+      const saved = await api.saveYearReport(year, blob)
+      setFiles((f) => [saved, ...(f ?? []).filter((x) => x.year !== year)])
+    } catch (e) {
+      alert('Die Abrechnung konnte nicht erstellt werden: ' + (e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addCost(e: FormEvent) {
     e.preventDefault()
-    const n = newName.trim()
-    if (data.clans.some((c) => c.name.toLowerCase() === n.toLowerCase())) return alert(`«${n}» gibt es schon.`)
-    await mutate(() => api.addClan(n))
-    setNewName('')
+    await mutate(() => api.addCost({ year, category, amount: Number(amount), note: note.trim() || undefined }))
+    setAmount('')
+    setNote('')
   }
 
-  async function rename(c: Clan) {
-    const n = prompt('Neuer Name für diesen Clan:', c.name)?.trim()
-    if (n && n !== c.name) await mutate(() => api.renameClan(c.id, n))
-  }
-
-  async function remove(c: Clan) {
-    const fams = familiesOf(c)
-    if (!confirm(`Clan «${c.name}» löschen?${fams.length ? ` ${fams.map((f) => f.name).join(', ')} bezahlen danach wieder einzeln.` : ''}`)) return
-    await mutate(async () => {
-      for (const f of fams) await api.setFamilyClan(f.id, undefined)
-      await api.deleteClan(c.id)
-    })
-  }
-
+  const file = files?.find((f) => f.year === year)
   return (
     <section className="card">
-      <h2>🏰 Clans</h2>
+      <h2>📊 Jahresabrechnung</h2>
       <p className="small muted">
-        Ein Clan bezahlt für alle seine Familien zusammen. Familien ohne Clan bezahlen selbst.
-        So ist die Jahresabrechnung in Excel nach Clans gegliedert.
+        Die Abrechnung nach Clans wird als Excel in Firebase gespeichert. Erfasse hier die Kosten des Jahres
+        und erstelle danach die Datei neu.
       </p>
-      {data.clans.map((c) => (
+      <div className="chips">
+        {years.map((y) => <button key={y} className={'chip' + (y === year ? ' on' : '')} onClick={() => setYear(y)}>{y}</button>)}
+      </div>
+
+      {costs.map((c) => (
         <div key={c.id} className="row-head cost-row">
-          <span><strong>{c.name}</strong> <span className="muted small">· {familiesOf(c).map((f) => f.name).join(', ') || 'noch keine Familie'}</span></span>
+          <span>{COST_LABELS[c.category]}{c.note ? <span className="muted small"> – {c.note}</span> : null}</span>
           <span className="row-end">
-            <button className="icon-btn" onClick={() => rename(c)} aria-label={`${c.name} umbenennen`}><Icon name="edit" size={16} /></button>
-            <button className="icon-btn" onClick={() => remove(c)} aria-label={`${c.name} löschen`}><Icon name="trash" size={16} /></button>
+            {money(c.amount)}
+            <button className="icon-btn" aria-label="Kosten löschen"
+              onClick={() => confirm('Diesen Kosteneintrag löschen?') && mutate(() => api.deleteCost(c.id))}>
+              <Icon name="trash" size={16} />
+            </button>
           </span>
         </div>
       ))}
-      <form className="form" onSubmit={add}>
-        <label>Neuer Clan<input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="z. B. Clan Schwarzenbach" required maxLength={60} /></label>
-        <button className="btn">Clan hinzufügen</button>
+      {!costs.length && <p className="muted small">Für {year} sind noch keine Kosten erfasst.</p>}
+      <form className="form" onSubmit={addCost}>
+        <div className="grid2">
+          <label>Art
+            <select value={category} onChange={(e) => setCategory(e.target.value as CostCategory)}>
+              {Object.entries(COST_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </label>
+          <label>Betrag<input type="number" inputMode="decimal" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required /></label>
+        </div>
+        <label>Notiz<input value={note} onChange={(e) => setNote(e.target.value)} placeholder="freiwillig" /></label>
+        <button className="btn">Kosten hinzufügen</button>
       </form>
 
-      {data.clans.length > 0 && data.families.length > 0 && (
-        <>
-          <h2 style={{ marginTop: 8 }}>Familien zuordnen</h2>
-          {data.families.map((f) => (
-            <label key={f.id} className="assign-row">
-              <span className="grow">{f.name}</span>
-              <select value={f.clanId ?? ''} onChange={(e) => mutate(() => api.setFamilyClan(f.id, e.target.value || undefined))}
-                aria-label={`Clan von Familie ${f.name}`}>
-                <option value="">Kein Clan (zahlt selbst)</option>
-                {data.clans.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </label>
+      <button className="btn primary" onClick={createExcel} disabled={busy}>
+        <Icon name="download" size={18} /> {busy ? 'Wird erstellt…' : `Excel ${year} erstellen`}
+      </button>
+      {file && (
+        <a className="btn ghost" href={file.url} target="_blank" rel="noreferrer">
+          📄 Feldele-Abrechnung-{file.year}.xlsx öffnen <span className="small muted">({timeAgo(file.createdAt)})</span>
+        </a>
+      )}
+      {files && files.filter((f) => f.year !== year).length > 0 && (
+        <p className="small">
+          Frühere Jahre: {files.filter((f) => f.year !== year).map((f) => (
+            <a key={f.year} href={f.url} target="_blank" rel="noreferrer" className="accent"> {f.year} </a>
           ))}
-        </>
+        </p>
       )}
     </section>
   )
 }
 
-/** Admins: the list of families. Members add families themselves when they sign up. */
-function FamilySettings() {
+/**
+ * Owner only: clans and the family names members can pick. Clans pay together and
+ * are never shown to members. Some clans may also use Waldele.
+ */
+function ClanSettings() {
   const { data, mutate } = useData()
-  const [newName, setNewName] = useState('')
-  const membersOf = (f: Family) => data.profiles.filter((p) => p.familyId === f.id)
-  const clanName = (f: Family) => data.clans.find((c) => c.id === f.clanId)?.name
+  const [newClan, setNewClan] = useState('')
+  const [newFamily, setNewFamily] = useState<Record<string, string>>({})
+  const familiesOf = (clanId: string | undefined) => data.families.filter((f) => (f.clanId ?? '') === (clanId ?? ''))
+  const membersOf = (f: Family) => data.profiles.filter((p) => p.familyId === f.id).map((p) => p.name)
+  const waldele = data.settings.waldeleClanIds
 
-  async function add(e: FormEvent) {
+  async function addClan(e: FormEvent) {
     e.preventDefault()
-    const n = newName.trim()
-    if (data.families.some((f) => f.name.toLowerCase() === n.toLowerCase())) return alert(`«${n}» gibt es schon.`)
-    await mutate(() => api.addFamily(n))
-    setNewName('')
+    const n = newClan.trim()
+    if (data.clans.some((c) => c.name.toLowerCase() === n.toLowerCase())) return alert(`«${n}» gibt es schon.`)
+    await mutate(() => api.addClan(n))
+    setNewClan('')
   }
 
-  async function rename(f: Family) {
-    const n = prompt('Neuer Name für diese Familie:', f.name)?.trim()
+  async function addFamily(e: FormEvent, clan: Clan) {
+    e.preventDefault()
+    const n = (newFamily[clan.id] ?? '').trim()
+    if (!n) return
+    if (data.families.some((f) => f.name.toLowerCase() === n.toLowerCase())) return alert(`«${n}» gibt es schon.`)
+    await mutate(async () => {
+      const f = await api.addFamily(n)
+      await api.setFamilyClan(f.id, clan.id)
+    })
+    setNewFamily((s) => ({ ...s, [clan.id]: '' }))
+  }
+
+  async function renameClan(c: Clan) {
+    const n = prompt('Neuer Name für diesen Clan:', c.name)?.trim()
+    if (n && n !== c.name) await mutate(() => api.renameClan(c.id, n))
+  }
+
+  async function deleteClan(c: Clan) {
+    if (familiesOf(c.id).length) return alert(`Verschiebe oder lösche zuerst die Familien von ${c.name}.`)
+    if (confirm(`Clan «${c.name}» löschen?`)) await mutate(() => api.deleteClan(c.id))
+  }
+
+  async function renameFamily(f: Family) {
+    const n = prompt('Neuer Name:', f.name)?.trim()
     if (n && n !== f.name) await mutate(() => api.renameFamily(f.id, n))
   }
 
-  async function remove(f: Family) {
-    if (membersOf(f).length) return alert(`Verschiebe zuerst die Mitglieder von ${f.name} in eine andere Familie.`)
+  async function deleteFamily(f: Family) {
+    if (membersOf(f).length) return alert(`${f.name} ist noch ausgewählt von: ${membersOf(f).join(', ')}.`)
     if (data.settings.priorityOrder.includes(f.id)) return alert(`Nimm ${f.name} zuerst aus der Prioritäts-Reihenfolge.`)
-    if (confirm(`Familie «${f.name}» löschen?`)) await mutate(() => api.deleteFamily(f.id))
+    if (confirm(`«${f.name}» löschen?`)) await mutate(() => api.deleteFamily(f.id))
   }
+
+  const toggleWaldele = (c: Clan) =>
+    mutate(() => api.updateSettings({ waldeleClanIds: waldele.includes(c.id) ? waldele.filter((x) => x !== c.id) : [...waldele, c.id] }))
 
   return (
     <section className="card">
-      <h2>👨‍👩‍👧 Familien</h2>
-      <p className="small muted">Familien teilen sich die Priorität. Neue Mitglieder wählen oder erfassen ihre Familie bei der Registrierung.</p>
-      {data.families.map((f) => (
-        <div key={f.id} className="row-head cost-row">
-          <span>
-            <strong>{f.name}</strong>
-            <span className="muted small"> · {membersOf(f).map((p) => p.name).join(', ') || 'noch niemand'}{clanName(f) ? ` · 🏰 ${clanName(f)}` : ''}</span>
-          </span>
-          <span className="row-end">
-            <button className="icon-btn" onClick={() => rename(f)} aria-label={`${f.name} umbenennen`}><Icon name="edit" size={16} /></button>
-            <button className="icon-btn" onClick={() => remove(f)} aria-label={`${f.name} löschen`}><Icon name="trash" size={16} /></button>
-          </span>
+      <h2>🏰 Clans & Familien</h2>
+      <p className="small muted">
+        Nur du siehst die Clans. Die Mitglieder wählen bei der Registrierung nur ihre Familie (den Namen darunter).
+        Ein Clan bezahlt für alle seine Familien zusammen.
+      </p>
+      {data.clans.map((c) => (
+        <div key={c.id} className="clan-block">
+          <div className="row-head">
+            <strong>{c.name}</strong>
+            <span className="row-end">
+              <button className="icon-btn" onClick={() => renameClan(c)} aria-label={`${c.name} umbenennen`}><Icon name="edit" size={16} /></button>
+              <button className="icon-btn" onClick={() => deleteClan(c)} aria-label={`${c.name} löschen`}><Icon name="trash" size={16} /></button>
+            </span>
+          </div>
+          <label className="check small">
+            <input type="checkbox" checked={waldele.includes(c.id)} onChange={() => toggleWaldele(c)} />
+            Darf auch Waldele nutzen (startet in Waldele)
+          </label>
+          {familiesOf(c.id).map((f) => (
+            <div key={f.id} className="row-head cost-row indent">
+              <span>{f.name} <span className="muted small">{membersOf(f).length ? `· ${membersOf(f).join(', ')}` : ''}</span></span>
+              <span className="row-end">
+                <select value={f.clanId ?? ''} onChange={(e) => mutate(() => api.setFamilyClan(f.id, e.target.value || undefined))}
+                  aria-label={`Clan von ${f.name}`} className="family-select">
+                  {data.clans.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                </select>
+                <button className="icon-btn" onClick={() => renameFamily(f)} aria-label={`${f.name} umbenennen`}><Icon name="edit" size={16} /></button>
+                <button className="icon-btn" onClick={() => deleteFamily(f)} aria-label={`${f.name} löschen`}><Icon name="trash" size={16} /></button>
+              </span>
+            </div>
+          ))}
+          <form className="comment-form indent" onSubmit={(e) => addFamily(e, c)}>
+            <input value={newFamily[c.id] ?? ''} onChange={(e) => setNewFamily((s) => ({ ...s, [c.id]: e.target.value }))}
+              placeholder="Familie hinzufügen…" maxLength={60} />
+            <button className="btn small">+</button>
+          </form>
         </div>
       ))}
-      <form className="form" onSubmit={add}>
-        <label>Neue Familie<input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="z. B. Schwarzenbach" required maxLength={60} /></label>
-        <button className="btn">Familie hinzufügen</button>
+      {familiesOf(undefined).length > 0 && (
+        <p className="small warn-text">Ohne Clan: {familiesOf(undefined).map((f) => f.name).join(', ')}</p>
+      )}
+      <form className="form" onSubmit={addClan}>
+        <label>Neuer Clan<input value={newClan} onChange={(e) => setNewClan(e.target.value)} required maxLength={60} /></label>
+        <button className="btn">Clan hinzufügen</button>
       </form>
     </section>
   )
@@ -255,6 +345,7 @@ function AdminSettings() {
   const [roomBeds, setRoomBeds] = useState('2')
   const [roomArea, setRoomArea] = useState('')
   const [roomCode, setRoomCode] = useState('')
+  const [roomHouse, setRoomHouse] = useState<House>('feldele')
 
   async function save(e: FormEvent) {
     e.preventDefault()
@@ -267,7 +358,7 @@ function AdminSettings() {
   async function addRoom(e: FormEvent) {
     e.preventDefault()
     await mutate(() => api.saveRoom({
-      name: roomName.trim(), beds: Number(roomBeds), area: roomArea.trim() || undefined, code: roomCode.trim() || undefined,
+      name: roomName.trim(), beds: Number(roomBeds), area: roomArea.trim() || undefined, code: roomCode.trim() || undefined, house: roomHouse,
     }))
     setRoomName('')
     setRoomCode('')
@@ -294,9 +385,10 @@ function AdminSettings() {
 
       <section className="card">
         <h2>Zimmer</h2>
+        <p className="small muted">Ein Haus ohne Zimmer wird als Ganzes gebucht.</p>
         {data.rooms.map((r) => (
           <div key={r.id} className="row-head cost-row">
-            <span>{roomLabel(r)} <span className="muted small">· {r.beds} {r.beds === 1 ? 'Bett' : 'Betten'}{r.code ? ` · ${r.code}` : ''}</span></span>
+            <span>{roomLabel(r)} <span className="muted small">· {HOUSES[houseOf(r)]} · {r.beds} {r.beds === 1 ? 'Bett' : 'Betten'}{r.code ? ` · ${r.code}` : ''}</span></span>
             <button className="icon-btn" aria-label="Zimmer löschen"
               onClick={() => confirm(`Zimmer «${roomLabel(r)}» löschen?`) && mutate(() => api.deleteRoom(r.id))}>
               <Icon name="trash" size={16} />
@@ -309,6 +401,11 @@ function AdminSettings() {
             <label>Betten<input type="number" min={1} value={roomBeds} onChange={(e) => setRoomBeds(e.target.value)} /></label>
           </div>
           <div className="grid2">
+            <label>Haus
+              <select value={roomHouse} onChange={(e) => setRoomHouse(e.target.value as House)}>
+                {Object.entries(HOUSES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </label>
             <label>Ort (z. B. DG)<input value={roomArea} onChange={(e) => setRoomArea(e.target.value)} list="room-areas" /></label>
             <label>Kurzform<input value={roomCode} onChange={(e) => setRoomCode(e.target.value)} placeholder="z. B. DG-Az" /></label>
           </div>

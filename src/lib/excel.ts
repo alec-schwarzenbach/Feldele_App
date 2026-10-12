@@ -1,6 +1,7 @@
 import type { Borders, Fill, Font, Worksheet } from 'exceljs'
 import type { YearReport } from './rules'
-import type { CostCategory, CostEntry } from './types'
+import type { CostCategory, CostEntry, Reservation } from './types'
+import { nightsInYear, toDate } from './dates'
 
 export const COST_LABELS: Record<CostCategory, string> = {
   rent: 'Miete', electricity: 'Strom', water: 'Wasser', supplies: 'Material', other: 'Anderes',
@@ -14,16 +15,21 @@ const thin: Partial<Borders> = { bottom: { style: 'thin', color: { argb: 'FFD9D4
 const headerFont: Partial<Font> = { bold: true, color: { argb: 'FFFFFFFF' } }
 
 /**
- * Builds the yearly bill as a formatted Excel file and downloads it:
- *  - "Übersicht": what each clan (or family without a clan) pays
+ * Builds the yearly bill as a formatted Excel file:
+ *  - "Übersicht": what each clan (or family without a clan) pays and how often it was there
  *  - "Details": clan → family → person, with nights and amounts
  *  - "Kosten": the cost entries of the year
+ *  - "Waldele": the Waldele stays of the year (usage only, not part of the Feldele bill)
  */
-export async function downloadYearExcel(report: YearReport, costs: CostEntry[], currency: string, houseName: string) {
+export async function buildYearWorkbook(
+  report: YearReport, costs: CostEntry[], currency: string, houseName: string,
+  waldele: { stays: Reservation[]; who: (userId: string) => string } = { stays: [], who: () => '' },
+): Promise<Blob> {
   const { default: ExcelJS } = await import('exceljs')
   const wb = new ExcelJS.Workbook()
   wb.creator = houseName
   const money = `#,##0.00 "${currency}"`
+  const staysOf = (p: YearReport['payers'][number]) => p.families.reduce((s, f) => s + f.members.reduce((t, m) => t + m.stays, 0), 0)
 
   const title = (ws: Worksheet, text: string, cols: number) => {
     ws.mergeCells(1, 1, 1, cols)
@@ -46,8 +52,8 @@ export async function downloadYearExcel(report: YearReport, costs: CostEntry[], 
 
   // ── Übersicht ──
   const ov = wb.addWorksheet('Übersicht', { views: [{ state: 'frozen', ySplit: 6 }] })
-  ov.columns = [{ width: 26 }, { width: 38 }, { width: 10 }, { width: 16 }, { width: 10 }, { width: 16 }]
-  title(ov, `${houseName} – Kostenabrechnung ${report.year}`, 6)
+  ov.columns = [{ width: 26 }, { width: 38 }, { width: 12 }, { width: 10 }, { width: 16 }, { width: 10 }, { width: 16 }]
+  title(ov, `${houseName} – Kostenabrechnung ${report.year}`, 7)
   ov.getCell('A3').value = 'Gesamtkosten'
   ov.getCell('B3').value = report.totalCosts
   ov.getCell('B3').numFmt = money
@@ -56,20 +62,21 @@ export async function downloadYearExcel(report: YearReport, costs: CostEntry[], 
   ov.getCell('B4').numFmt = money
   for (const a of ['A3', 'A4']) ov.getCell(a).font = { bold: true }
   for (const a of ['B3', 'B4']) ov.getCell(a).alignment = { horizontal: 'left' }
-  header(ov, 6, ['Zahler (Clan / Familie)', 'Familien', 'Nächte', 'Personennächte', 'Anteil', 'Betrag'])
+  header(ov, 6, ['Zahler (Clan / Familie)', 'Familien', 'Aufenthalte', 'Nächte', 'Personennächte', 'Anteil', 'Betrag'])
   let r = 7
   for (const p of report.payers) {
     const row = ov.getRow(r++)
-    row.values = [p.name, p.families.map((f) => f.family?.name ?? 'Ohne Familie').join(', '), p.nights, p.personNights, p.share, p.owed]
-    row.getCell(5).numFmt = '0.0%'
-    row.getCell(6).numFmt = money
+    row.values = [p.name, p.families.map((f) => f.family?.name ?? 'Ohne Familie').join(', '), staysOf(p), p.nights, p.personNights, p.share, p.owed]
+    row.getCell(6).numFmt = '0.0%'
+    row.getCell(7).numFmt = money
     row.getCell(1).font = { bold: true }
     row.eachCell((c) => (c.border = thin))
   }
   const total = ov.getRow(r)
-  total.values = ['Total', '', report.payers.reduce((s, p) => s + p.nights, 0), report.totalPersonNights, 1, report.totalCosts]
-  total.getCell(5).numFmt = '0.0%'
-  total.getCell(6).numFmt = money
+  total.values = ['Total', '', report.payers.reduce((s, p) => s + staysOf(p), 0), report.payers.reduce((s, p) => s + p.nights, 0),
+    report.totalPersonNights, 1, report.totalCosts]
+  total.getCell(6).numFmt = '0.0%'
+  total.getCell(7).numFmt = money
   total.eachCell((c) => {
     c.font = { bold: true }
     c.fill = fill(LIGHT)
@@ -127,14 +134,28 @@ export async function downloadYearExcel(report: YearReport, costs: CostEntry[], 
     c.fill = fill(LIGHT)
   })
 
-  for (const ws of [ov, dt, ct]) ws.properties.tabColor = { argb: GREEN }
+  // ── Waldele: usage only ──
+  const wd = wb.addWorksheet('Waldele')
+  wd.columns = [{ width: 24 }, { width: 14 }, { width: 14 }, { width: 10 }, { width: 10 }, { width: 30 }]
+  title(wd, `Waldele – Aufenthalte ${report.year}`, 6)
+  header(wd, 3, ['Person', 'Anreise', 'Abreise', 'Nächte', 'Personen', 'Anlass'])
+  r = 4
+  const inYear = waldele.stays
+    .filter((s) => s.status !== 'tentative' && nightsInYear(s.start, s.end, report.year) > 0 && (s.status === 'active' || s.lateCancel))
+    .sort((a, b) => a.start.localeCompare(b.start))
+  for (const s of inYear) {
+    const row = wd.getRow(r++)
+    row.values = [waldele.who(s.userId), toDate(s.start), toDate(s.end), nightsInYear(s.start, s.end, report.year), s.people,
+      s.status === 'cancelled' ? 'spät storniert' : s.occasion ?? '']
+    row.getCell(2).numFmt = 'dd.mm.yyyy'
+    row.getCell(3).numFmt = 'dd.mm.yyyy'
+    row.eachCell((c) => (c.border = thin))
+  }
+  if (!inYear.length) wd.getCell('A4').value = 'Keine Aufenthalte in diesem Jahr.'
+
+  for (const ws of [ov, dt, ct, wd]) ws.properties.tabColor = { argb: GREEN }
   ov.getCell('A1').fill = fill(SAND)
 
   const buffer = await wb.xlsx.writeBuffer()
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = `${houseName}-Abrechnung-${report.year}.xlsx`
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+  return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 }

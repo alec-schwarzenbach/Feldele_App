@@ -4,7 +4,7 @@ import { api } from '../lib/api'
 import { formatDay, formatRange, today } from '../lib/dates'
 import { cancelTerms, promotable, roomLabel, stayNights, waitingFor } from '../lib/rules'
 import { useData } from '../lib/store'
-import { isAdmin } from '../lib/types'
+import { HOUSES, houseOf, isAdmin } from '../lib/types'
 
 export function StayDetail() {
   const { id } = useParams()
@@ -67,7 +67,8 @@ export function StayDetail() {
             <dt>Nächte</dt><dd>{stayNights(r)}</dd>
             <dt>Personen</dt><dd>{r.people}</dd>
             <dt>Personennächte</dt><dd>{stayNights(r) * r.people}</dd>
-            <dt>Zimmer</dt><dd>{r.roomIds.map((rid) => roomLabel(data.rooms.find((x) => x.id === rid))).join(', ')}</dd>
+            <dt>Haus</dt><dd>{HOUSES[houseOf(r)]}</dd>
+            <dt>Zimmer</dt><dd>{r.roomIds.length ? r.roomIds.map((rid) => roomLabel(data.rooms.find((x) => x.id === rid))).join(', ') : 'Ganzes Haus'}</dd>
             {r.occasion && (<><dt>Anlass</dt><dd>🎉 {r.occasion}</dd></>)}
             {r.note && (<><dt>Notiz</dt><dd>{r.note}</dd></>)}
             <dt>Auto</dt><dd>{car.length ? car.map((b) => formatRange(b.start, b.end)).join(', ') : '—'}</dd>
@@ -87,7 +88,7 @@ export function StayDetail() {
           </section>
         )}
 
-        {isUpcoming && canEdit && car.length === 0 && (
+        {isUpcoming && canEdit && car.length === 0 && houseOf(r) === 'feldele' && (
           <Link className="btn ghost" to={`/car/new?reservation=${r.id}`}>Auto für diesen Aufenthalt anfragen</Link>
         )}
       </div>

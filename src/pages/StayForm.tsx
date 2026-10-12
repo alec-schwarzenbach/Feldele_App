@@ -5,12 +5,17 @@ import { api } from '../lib/api'
 import { addDays, formatDay, formatRange, nightsBetween, today } from '../lib/dates'
 import { carConflicts, carOwnerName, claimDeadlineFrom, CLAIM_FREE_DAYS, freeCancelDeadline, planBooking, priorityFamilyFor, roomConflicts, roomsByArea } from '../lib/rules'
 import { useData } from '../lib/store'
+import { HOUSES, houseOf } from '../lib/types'
 
 export function StayForm() {
   const { id } = useParams()
-  const { user, data, mutate, name, familyName } = useData()
+  const { user, data, mutate, name, familyName, house: selectedHouse } = useData()
   const nav = useNavigate()
   const existing = id ? data.reservations.find((r) => r.id === id) : undefined
+  const house = existing ? houseOf(existing) : selectedHouse
+  // A house without rooms set up (Waldele for now) is booked as a whole.
+  const houseRooms = data.rooms.filter((r) => houseOf(r) === house)
+  const wholeHouse = houseRooms.length === 0
 
   const [start, setStart] = useState(existing?.start ?? addDays(today(), 7))
   const [end, setEnd] = useState(existing?.end ?? addDays(today(), 10))
@@ -25,14 +30,14 @@ export function StayForm() {
 
   const nights = nightsBetween(start, end)
   const validDates = end > start
-  const draft = { id, start, end, roomIds }
-  const plan = validDates && roomIds.length ? planBooking(draft, data.reservations, data.settings, existing?.userId ?? user.id, data.profiles) : { kind: 'free' as const }
+  const draft = { id, start, end, roomIds, house }
+  const plan = validDates && (roomIds.length || wholeHouse) ? planBooking(draft, data.reservations, data.settings, existing?.userId ?? user.id, data.profiles) : { kind: 'free' as const }
   // Editing a confirmed stay can't take over other rooms; a "maybe" stay stays "maybe".
   const blocked = plan.kind === 'own' || (existing?.status === 'active' && plan.kind !== 'free')
   const conflicts = validDates ? roomConflicts(data.reservations, draft) : []
   const priorityId = priorityFamilyFor(Number(start.slice(0, 4)), data.settings)
   const takenRoom = (roomId: string) =>
-    validDates && roomConflicts(data.reservations, { id, start, end, roomIds: [roomId] }).length > 0
+    validDates && roomConflicts(data.reservations, { id, start, end, roomIds: [roomId], house }).length > 0
   const beds = roomIds.reduce((s, rid) => s + (data.rooms.find((r) => r.id === rid)?.beds ?? 0), 0)
   const cs = carStart || start
   const ce = carEnd || end
@@ -47,7 +52,7 @@ export function StayForm() {
   async function submit(e: FormEvent) {
     e.preventDefault()
     if (!validDates) return alert('Die Abreise muss nach der Anreise sein.')
-    if (roomIds.length === 0) return alert('Wähle mindestens ein Zimmer.')
+    if (roomIds.length === 0 && !wholeHouse) return alert('Wähle mindestens ein Zimmer.')
     if (blocked) return alert('Einige dieser Zimmer sind in dieser Zeit schon gebucht.')
     if (!existing && plan.kind === 'claim' && !confirm(
       `Deine Familie hat ${start.slice(0, 4)} Priorität. ${[...new Set(plan.bump.map((b) => name(b.userId)))].join(', ')} ` +
@@ -62,6 +67,7 @@ export function StayForm() {
       }
       const r = await api.createReservation({
         ...fields,
+        house,
         status: plan.kind === 'maybe' ? 'tentative' : 'active',
         ...(plan.kind === 'claim' ? { priorityClaim: true, claimDeadline: claimDeadlineFrom() } : {}),
       })
@@ -73,7 +79,7 @@ export function StayForm() {
             `Dein Aufenthalt ${formatRange(b.start, b.end)} ist jetzt «Vielleicht» – er wird wieder bestätigt, falls ${user.name} storniert.`)
         }
       }
-      if (needCar) await api.createCarBooking({ start: cs, end: ce, reservationId: r.id, note: undefined })
+      if (needCar && house === 'feldele') await api.createCarBooking({ start: cs, end: ce, reservationId: r.id, note: undefined })
       return r.id
     })
     setSaving(false)
@@ -82,7 +88,7 @@ export function StayForm() {
 
   return (
     <>
-      <Header title={existing ? 'Aufenthalt bearbeiten' : 'Aufenthalt buchen'} back />
+      <Header title={`${existing ? 'Aufenthalt bearbeiten' : 'Buchen'} – ${HOUSES[house]}`} back />
       <form className="page form" onSubmit={submit}>
         <div className="grid2">
           <label>Anreise<input type="date" value={start} min={existing ? undefined : today()} onChange={(e) => {
@@ -103,7 +109,8 @@ export function StayForm() {
 
         <fieldset>
           <legend>Zimmer</legend>
-          {roomsByArea(data.rooms).map(([area, rooms]) => (
+          {wholeHouse && <p className="small muted">Für {HOUSES[house]} sind noch keine Zimmer erfasst – die Buchung gilt für das ganze Haus.</p>}
+          {roomsByArea(houseRooms).map(([area, rooms]) => (
             <div key={area}>
               {area && <p className="room-area">{area}</p>}
               <div className="room-list">
@@ -151,7 +158,7 @@ export function StayForm() {
         </label>
         <label>Notiz (optional)<textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} /></label>
 
-        {!existing && (
+        {!existing && house === 'feldele' && (
           <fieldset>
             <label className="check">
               <input type="checkbox" checked={needCar} onChange={(e) => setNeedCar(e.target.checked)} />
