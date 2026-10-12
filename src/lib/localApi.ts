@@ -41,7 +41,7 @@ interface DB {
 
 const KEY = 'lodge-demo-db'
 const SESSION = 'lodge-demo-session'
-const VERSION = 7
+const VERSION = 8
 let demoReports: YearReportFile[] = []
 
 const uid = () => crypto.randomUUID()
@@ -83,6 +83,11 @@ function seed(): DB {
       { id: 'J-DzW', area: 'Jägerwohnung', name: 'Doppelzimmer West', beds: 2, code: 'J-DzW' },
       { id: 'H-DzO', area: 'Harowohnung', name: 'Doppelzimmer Ost', beds: 2, code: 'H-DzO' },
       { id: 'H-DzW', area: 'Harowohnung', name: 'Doppelzimmer West', beds: 2, code: 'H-DzW' },
+      { id: 'W-GZ', house: 'waldele', name: 'Grosses Zimmer', beds: 2, code: 'W-GZ' },
+      { id: 'W-BZ', house: 'waldele', name: 'Blumenzimmer', beds: 2, code: 'W-BZ' },
+      { id: 'W-GZUG', house: 'waldele', name: 'Grosses Zimmer UG', beds: 2, code: 'W-GZUG' },
+      { id: 'W-KZUG', house: 'waldele', name: 'Kleines Zimmer UG', beds: 2, code: 'W-KZUG' },
+      { id: 'W-H', house: 'waldele', name: 'Hirschele', beds: 2, code: 'W-H' },
     ],
     reservations: [
       res('res-1', 'u-maria', -60, 5, 4, ['DG-Az', 'OG-Mz']),
@@ -91,8 +96,8 @@ function seed(): DB {
       res('res-4', 'u-alec', -10, 4, 3, ['J-DzO']),
       res('res-5', 'u-maria', 12, 4, 2, ['DG-Az']),
       res('res-6', 'u-thomas', 150, 7, 5, ['OG-Mz', 'J-DzO']),
-      res('res-w1', 'u-chrisi', 5, 3, 4, [], { house: 'waldele' }),
-      res('res-w2', 'u-chrisi', -25, 2, 2, [], { house: 'waldele' }),
+      res('res-w1', 'u-chrisi', 5, 3, 4, ['W-GZ', 'W-BZ'], { house: 'waldele' }),
+      res('res-w2', 'u-chrisi', -25, 2, 2, ['W-H'], { house: 'waldele' }),
     ],
     carBookings: [
       { id: 'car-1', userId: 'u-maria', reservationId: 'res-5', start: addDays(t, 12), end: addDays(t, 16), createdAt: now() },

@@ -34,7 +34,8 @@ export function StayForm() {
   const plan = validDates && (roomIds.length || wholeHouse) ? planBooking(draft, data.reservations, data.settings, existing?.userId ?? user.id, data.profiles) : { kind: 'free' as const }
   // Editing a confirmed stay can't take over other rooms; a "maybe" stay stays "maybe".
   const blocked = plan.kind === 'own' || (existing?.status === 'active' && plan.kind !== 'free')
-  const conflicts = validDates ? roomConflicts(data.reservations, draft) : []
+  // Without rooms picked yet nothing clashes (except in a house without rooms, booked as a whole).
+  const conflicts = validDates && (roomIds.length || wholeHouse) ? roomConflicts(data.reservations, draft) : []
   const priorityId = priorityFamilyFor(Number(start.slice(0, 4)), data.settings)
   const takenRoom = (roomId: string) =>
     validDates && roomConflicts(data.reservations, { id, start, end, roomIds: [roomId], house }).length > 0

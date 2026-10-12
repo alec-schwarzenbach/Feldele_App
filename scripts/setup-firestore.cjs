@@ -28,6 +28,11 @@ const ROOMS = [
   { area: 'Jägerwohnung', name: 'Doppelzimmer West', beds: 2, code: 'J-DzW' },
   { area: 'Harowohnung', name: 'Doppelzimmer Ost', beds: 2, code: 'H-DzO' },
   { area: 'Harowohnung', name: 'Doppelzimmer West', beds: 2, code: 'H-DzW' },
+  { house: 'waldele', name: 'Grosses Zimmer', beds: 2, code: 'W-GZ' },
+  { house: 'waldele', name: 'Blumenzimmer', beds: 2, code: 'W-BZ' },
+  { house: 'waldele', name: 'Grosses Zimmer UG', beds: 2, code: 'W-GZUG' },
+  { house: 'waldele', name: 'Kleines Zimmer UG', beds: 2, code: 'W-KZUG' },
+  { house: 'waldele', name: 'Hirschele', beds: 2, code: 'W-H' },
 ]
 
 const EXAMPLES = {
