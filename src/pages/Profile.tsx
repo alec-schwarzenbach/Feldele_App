@@ -6,9 +6,9 @@ import { api, type YearReportFile } from '../lib/api'
 import { LOCALE, timeAgo } from '../lib/dates'
 import { buildYearWorkbook, COST_LABELS } from '../lib/excel'
 import { resetDemoData } from '../lib/localApi'
-import { buildYearReport, priorityFamilyFor, roomLabel } from '../lib/rules'
+import { buildYearReport, priorityClanFor, roomLabel } from '../lib/rules'
 import { useData } from '../lib/store'
-import { HOUSES, houseOf, isAdmin, isOwner, NO_FAMILY, type Clan, type CostCategory, type Family, type House, type Profile as Member, type Role } from '../lib/types'
+import { HOUSES, houseOf, isAdmin, isOwner, NO_FAMILY, type Clan, type CostCategory, type Family, type House, type LoxoneConfig, type Profile as Member, type Role } from '../lib/types'
 
 const ROLE_LABELS: Record<Role, string> = {
   owner: 'Besitzer', admin: 'Admin', member: 'Mitglied', car_keeper: 'Autobesitzer', cleaner: 'Cleaner (Reinigung)',
@@ -70,6 +70,7 @@ export function Profile() {
         {owner && <YearlyBill />}
         {owner && <PrioritySettings />}
         {owner && <ClanSettings />}
+        {owner && <WaldeleHeating />}
 
         {admin && (
           <section className="card">
@@ -93,10 +94,18 @@ export function Profile() {
                   {data.families.map((f) => <option key={f.id} value={f.id}>Familie {f.name}</option>)}
                   <option value={NO_FAMILY}>Keine Familie (zahlt nicht mit)</option>
                 </select>
+                {p.role === 'cleaner' && (
+                  <select className="family-select" value={p.cleanerHouse ?? 'feldele'} disabled={!owner}
+                    onChange={(e) => mutate(() => api.updateProfile(p.id, { cleanerHouse: e.target.value as House }))}
+                    aria-label={`Haus von ${p.name}`}>
+                    {Object.entries(HOUSES).map(([v, l]) => <option key={v} value={v}>Putzt im {l}</option>)}
+                  </select>
+                )}
               </div>
             ))}
             <p className="small muted">
-              <strong>Cleaner</strong> bekommt eine Push-Mitteilung bei jeder Buchung oder Stornierung und am Tag vor jeder Anreise.
+              <strong>Cleaner</strong> bekommt eine Push-Mitteilung bei jeder Buchung oder Stornierung und am Tag vor jeder Anreise –
+              nur für das Haus, das bei ihr eingestellt ist.
               Der <strong>Autobesitzer</strong> bekommt die Mitteilungen zum Auto.
             </p>
           </section>
@@ -265,6 +274,7 @@ function ClanSettings() {
 
   async function deleteClan(c: Clan) {
     if (familiesOf(c.id).length) return alert(`Verschiebe oder lösche zuerst die Familien von ${c.name}.`)
+    if (data.settings.priorityOrder.includes(c.id)) return alert(`Nimm ${c.name} zuerst aus der Prioritäts-Reihenfolge.`)
     if (confirm(`Clan «${c.name}» löschen?`)) await mutate(() => api.deleteClan(c.id))
   }
 
@@ -275,7 +285,6 @@ function ClanSettings() {
 
   async function deleteFamily(f: Family) {
     if (membersOf(f).length) return alert(`${f.name} ist noch ausgewählt von: ${membersOf(f).join(', ')}.`)
-    if (data.settings.priorityOrder.includes(f.id)) return alert(`Nimm ${f.name} zuerst aus der Prioritäts-Reihenfolge.`)
     if (confirm(`«${f.name}» löschen?`)) await mutate(() => api.deleteFamily(f.id))
   }
 
@@ -417,13 +426,14 @@ function AdminSettings() {
   )
 }
 
-/** Owner only: which family has priority each year. The order repeats once every family had a turn. */
+/** Owner only: which clan has priority each year. The order repeats once every clan had a turn. */
 function PrioritySettings() {
-  const { data, mutate, familyName } = useData()
+  const { data, mutate } = useData()
+  const clanName = (id: string | undefined) => data.clans.find((c) => c.id === id)?.name ?? '?'
   const s = data.settings
   const order = s.priorityOrder
   const thisYear = new Date().getFullYear()
-  const candidates = data.families.filter((f) => !order.includes(f.id))
+  const candidates = data.clans.filter((c) => !order.includes(c.id))
 
   const save = (patch: { priorityOrder?: string[]; priorityStartYear?: number }) => mutate(() => api.updateSettings(patch))
   const move = (i: number, by: number) => {
@@ -436,8 +446,8 @@ function PrioritySettings() {
     <section className="card">
       <h2>⭐ Jährliche Priorität</h2>
       <p className="small muted">
-        Alle Mitglieder der Familie mit Priorität können Daten übernehmen, die eine andere Familie gebucht hat
-        (deren Aufenthalt wird «Vielleicht»). Reihenfolge einmal festlegen – nach der letzten Familie beginnt sie von vorne.
+        Alle Familien des Clans mit Priorität können Daten übernehmen, die ein anderer Clan gebucht hat
+        (deren Aufenthalt wird «Vielleicht»). Reihenfolge einmal festlegen – nach dem letzten Clan beginnt sie von vorne. Die Mitglieder sehen nur die Familiennamen, nicht den Clan.
       </p>
       <label>Erstes Jahr
         <input type="number" min={2000} max={2100} value={s.priorityStartYear}
@@ -445,11 +455,11 @@ function PrioritySettings() {
       </label>
       {order.map((id, i) => (
         <div key={id} className="row-head cost-row">
-          <span><strong>{familyName(id)}</strong> <span className="muted small">· {s.priorityStartYear + i}{order.length > 1 ? `, ${s.priorityStartYear + i + order.length}, …` : ' und jedes Jahr'}</span></span>
+          <span><strong>{clanName(id)}</strong> <span className="muted small">· {s.priorityStartYear + i}{order.length > 1 ? `, ${s.priorityStartYear + i + order.length}, …` : ' und jedes Jahr'}</span></span>
           <span className="row-end">
             <button className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Nach oben">↑</button>
             <button className="icon-btn" disabled={i === order.length - 1} onClick={() => move(i, 1)} aria-label="Nach unten">↓</button>
-            <button className="icon-btn" onClick={() => save({ priorityOrder: order.filter((x) => x !== id) })} aria-label={`${familyName(id)} entfernen`}>
+            <button className="icon-btn" onClick={() => save({ priorityOrder: order.filter((x) => x !== id) })} aria-label={`${clanName(id)} entfernen`}>
               <Icon name="trash" size={16} />
             </button>
           </span>
@@ -458,16 +468,109 @@ function PrioritySettings() {
       {candidates.length > 0 && (
         <label>Zur Reihenfolge hinzufügen
           <select value="" onChange={(e) => e.target.value && save({ priorityOrder: [...order, e.target.value] })}>
-            <option value="">— Familie wählen —</option>
-            {candidates.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+            <option value="">— Clan wählen —</option>
+            {candidates.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </label>
       )}
       {order.length > 0 && (
         <p className="small">
           Nächste Jahre: {Array.from({ length: 6 }, (_, k) => thisYear + k)
-            .map((y) => `${y} ${familyName(priorityFamilyFor(y, s))}`).join(' · ')}
+            .map((y) => `${y} ${clanName(priorityClanFor(y, s))}`).join(' · ')}
         </p>
+      )}
+    </section>
+  )
+}
+
+const HEATING_URL = 'https://feldele.web.app/api/waldele-heizung'
+
+/**
+ * Owner only: the link the Loxone Miniserver in Waldele polls. It answers 1 (heat)
+ * from `preheatHours` before the arrival time until the departure, otherwise 0.
+ */
+function WaldeleHeating() {
+  const [config, setConfig] = useState<LoxoneConfig | null>()
+  const [status, setStatus] = useState<string>()
+
+  useEffect(() => {
+    api.getLoxoneConfig().then(setConfig).catch(() => setConfig(null))
+  }, [])
+
+  async function save(c: LoxoneConfig) {
+    try {
+      await api.saveLoxoneConfig(c)
+      setConfig(c)
+    } catch (e) {
+      alert((e as Error).message)
+    }
+  }
+
+  function newKey() {
+    const bytes = crypto.getRandomValues(new Uint8Array(18))
+    const key = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+    return save({ preheatHours: 12, arrivalHour: 16, departureHour: 11, ...config, key })
+  }
+
+  async function check() {
+    if (!config) return
+    try {
+      const r = await fetch(`${HEATING_URL}?key=${config.key}&format=json`)
+      const j = await r.json()
+      const t = (iso: string | null) => (iso ? new Date(iso).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'short' }) : '–')
+      setStatus(`${j.heating ? '🔥 Heizen' : '❄️ Aus'} · ${j.reason} · ein: ${t(j.on)} · aus: ${t(j.off)}`)
+    } catch {
+      setStatus('Keine Antwort – ist der Link schon veröffentlicht?')
+    }
+  }
+
+  if (config === undefined) return null
+  const url = config ? `${HEATING_URL}?key=${config.key}` : ''
+  const num = (field: 'preheatHours' | 'arrivalHour' | 'departureHour', label: string, max: number) => (
+    <label>{label}
+      <input type="number" min={0} max={max} value={config?.[field] ?? ''}
+        onChange={(e) => config && save({ ...config, [field]: Number(e.target.value) })} />
+    </label>
+  )
+
+  return (
+    <section className="card">
+      <h2>🔥 Waldele-Heizung (Loxone)</h2>
+      <p className="small muted">
+        Der Miniserver fragt diesen Link alle paar Minuten ab. Antwort <strong>1</strong> = heizen
+        (ab {config?.preheatHours ?? 12} h vor der Anreise bis zur Abreise), <strong>0</strong> = niemand gebucht.
+      </p>
+      {config ? (
+        <>
+          <input readOnly value={url} onFocus={(e) => e.target.select()} aria-label="Link für den Miniserver" />
+          <div className="row-end" style={{ gap: 8 }}>
+            <button className="btn small" onClick={() => navigator.clipboard?.writeText(url)}>Link kopieren</button>
+            <button className="btn small ghost" onClick={check}>Status prüfen</button>
+            <button className="btn small ghost danger-text"
+              onClick={() => confirm('Neuen Link erzeugen? Der alte funktioniert danach nicht mehr – im Miniserver ersetzen.') && newKey()}>
+              Neuer Schlüssel
+            </button>
+          </div>
+          {status && <p className="small">{status}</p>}
+          <div className="grid2">
+            {num('preheatHours', 'Vorheizen (Stunden)', 72)}
+            {num('arrivalHour', 'Anreise um (Uhr)', 23)}
+          </div>
+          <div className="grid2">
+            {num('departureHour', 'Abreise um (Uhr)', 23)}
+          </div>
+          <details className="small">
+            <summary>So richtest du es in Loxone Config ein</summary>
+            <ol>
+              <li>Peripherie → <strong>Virtueller HTTP Eingang</strong> hinzufügen, URL = Link oben, Abfragezyklus z. B. 300 s.</li>
+              <li>Darunter einen <strong>Virtuellen HTTP Eingang Befehl</strong>, Befehlserkennung: <code>\v</code></li>
+              <li>Den Ausgang (1/0) mit der Heizung verbinden, z. B. am Intelligenten Raumregler auf «Komfort» bzw. «Eco/Frostschutz».</li>
+              <li>In Loxone Config speichern und in den Miniserver laden.</li>
+            </ol>
+          </details>
+        </>
+      ) : (
+        <button className="btn primary" onClick={newKey}>Link für den Miniserver erzeugen</button>
       )}
     </section>
   )

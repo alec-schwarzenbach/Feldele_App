@@ -4,14 +4,14 @@ import { MonthCalendar } from '../components/MonthCalendar'
 import { Avatar, Empty, Fab, Header, HouseSwitch, Segmented } from '../components/ui'
 import { colorFor } from '../lib/colors'
 import { formatDay, formatRange, today } from '../lib/dates'
-import { priorityFamilyFor, roomLabel, stayNights } from '../lib/rules'
+import { priorityClanFor, priorityHolders, roomLabel, stayNights } from '../lib/rules'
 import { useData } from '../lib/store'
-import { HOUSES, houseOf, type Reservation } from '../lib/types'
+import { HOUSES, houseOf, isOwner, type Reservation } from '../lib/types'
 
 type View = 'upcoming' | 'mine' | 'past'
 
 export function Stays() {
-  const { user, data, name, familyName, house } = useData()
+  const { user, data, name, house } = useData()
   const [view, setView] = useState<View>('upcoming')
   const [day, setDay] = useState<string>()
   const t = today()
@@ -20,8 +20,9 @@ export function Stays() {
   const active = here.filter((r) => r.status === 'active')
   // The list also shows "maybe" stays; the calendar only confirmed ones.
   const open = here.filter((r) => r.status !== 'cancelled')
-  const priorityId = priorityFamilyFor(Number(t.slice(0, 4)), data.settings)
-  const nextPriorityId = priorityFamilyFor(Number(t.slice(0, 4)) + 1, data.settings)
+  const priorityId = priorityClanFor(Number(t.slice(0, 4)), data.settings)
+  const nextPriorityId = priorityClanFor(Number(t.slice(0, 4)) + 1, data.settings)
+  const holders = (clanId: string) => priorityHolders(clanId, data.families, data.clans, isOwner(user))
   const staff = user.role === 'car_keeper' || user.role === 'cleaner'
 
   let list: Reservation[]
@@ -40,8 +41,8 @@ export function Stays() {
         <HouseSwitch />
         {priorityId && house === 'feldele' && (
           <p className="info small">
-            ⭐ Priorität {t.slice(0, 4)}: <strong>{familyName(priorityId)}</strong>
-            {nextPriorityId && <> · {Number(t.slice(0, 4)) + 1}: <strong>{familyName(nextPriorityId)}</strong></>}
+            ⭐ Priorität {t.slice(0, 4)}: <strong>{holders(priorityId)}</strong>
+            {nextPriorityId && <><br />{Number(t.slice(0, 4)) + 1}: <strong>{holders(nextPriorityId)}</strong></>}
           </p>
         )}
         <MonthCalendar

@@ -134,7 +134,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // Which house is shown. Waldele people start in Waldele; the last choice is remembered on this device.
-  const houses: House[] = user && data && canUseWaldele(user, data.families, data.settings) ? ['waldele', 'feldele'] : ['feldele']
+  // A cleaner only sees the house she cleans.
+  const houses: House[] = user?.role === 'cleaner' ? [user.cleanerHouse ?? 'feldele']
+    : user && data && canUseWaldele(user, data.families, data.settings) ? ['waldele', 'feldele'] : ['feldele']
   const [chosenHouse, setChosenHouse] = useState<House | null>(null)
   const remembered = (() => {
     try {

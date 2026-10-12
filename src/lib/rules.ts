@@ -10,8 +10,8 @@ export function freeCancelDeadline(r: Pick<Reservation, 'start'>, settings: Sett
   return addMonths(r.start, -settings.freeCancelMonths)
 }
 
-/** Which family has priority in a year: the rotation repeats once every family had its turn. */
-export function priorityFamilyFor(year: number, settings: Settings): string | undefined {
+/** Which clan has priority in a year: the rotation repeats once every clan had its turn. */
+export function priorityClanFor(year: number, settings: Settings): string | undefined {
   const order = settings.priorityOrder
   if (!order.length) return undefined
   const n = order.length
@@ -20,7 +20,21 @@ export function priorityFamilyFor(year: number, settings: Settings): string | un
 
 export const stayYear = (r: Pick<Reservation, 'start'>) => Number(r.start.slice(0, 4))
 
-const familyOf = (userId: string, profiles: Profile[]) => profiles.find((p) => p.id === userId)?.familyId
+/** The clan a person belongs to (through their family). */
+export function clanOf(userId: string, profiles: Profile[], families: Family[]): string | undefined {
+  const familyId = profiles.find((p) => p.id === userId)?.familyId
+  return families.find((f) => f.id === familyId)?.clanId
+}
+
+/**
+ * Who has priority, as members may see it: the family names of the priority clan.
+ * Clan names stay hidden from members; only the owner gets the clan name.
+ */
+export function priorityHolders(clanId: string | undefined, families: Family[], clans: Clan[], showClan: boolean): string {
+  if (!clanId) return ''
+  if (showClan) return clans.find((c) => c.id === clanId)?.name ?? '?'
+  return families.filter((f) => f.clanId === clanId).map((f) => f.name).join(', ')
+}
 
 type Draft = { id?: string; start: string; end: string; roomIds: string[]; house?: House }
 
@@ -40,15 +54,20 @@ export function roomConflicts(all: Reservation[], draft: Draft, statuses: Reserv
   )
 }
 
-/** Members of the clans listed in settings.waldeleClanIds may also use Waldele; the owner always can. */
+/**
+ * Members of the clans listed in settings.waldeleClanIds may also use Waldele; the owner always can.
+ * The Waldele cleaner works there too.
+ */
 export function canUseWaldele(user: Profile, families: Family[], settings: Settings): boolean {
   if (user.role === 'owner') return true
+  if (user.role === 'cleaner') return user.cleanerHouse === 'waldele'
   const clanId = families.find((f) => f.id === user.familyId)?.clanId
   return !!clanId && settings.waldeleClanIds.includes(clanId)
 }
 
 /** Waldele people start in Waldele and switch to Feldele when they want to stay there. */
 export function defaultHouse(user: Profile, families: Family[], settings: Settings): House {
+  if (user.role === 'cleaner') return user.cleanerHouse ?? 'feldele'
   return user.role !== 'owner' && canUseWaldele(user, families, settings) ? 'waldele' : 'feldele'
 }
 
@@ -72,15 +91,16 @@ export function planBooking(
   settings: Settings,
   userId: string,
   profiles: Profile[],
+  families: Family[],
 ): BookingPlan {
   const conflicts = roomConflicts(all, draft)
   if (!conflicts.length) return { kind: 'free' }
   const own = conflicts.filter((r) => r.userId === userId)
   if (own.length) return { kind: 'own', conflicts: own }
-  // Priority only works against other families, never inside your own family.
-  const myFamily = familyOf(userId, profiles)
-  const sameFamily = conflicts.some((r) => familyOf(r.userId, profiles) === myFamily)
-  if (myFamily && !sameFamily && priorityFamilyFor(stayYear(draft), settings) === myFamily) return { kind: 'claim', bump: conflicts }
+  // Priority only works against other clans, never inside your own clan.
+  const myClan = clanOf(userId, profiles, families)
+  const sameClan = conflicts.some((r) => clanOf(r.userId, profiles, families) === myClan)
+  if (myClan && !sameClan && priorityClanFor(stayYear(draft), settings) === myClan) return { kind: 'claim', bump: conflicts }
   return { kind: 'maybe', blockers: conflicts }
 }
 

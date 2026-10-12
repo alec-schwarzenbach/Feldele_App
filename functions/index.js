@@ -3,6 +3,7 @@
 //  sendPush        every new document in "notifications" becomes a push to that person's phones
 //  stayChanged     tells the cleaner(s) when a stay is confirmed or cancelled
 //  cleanerReminder every morning: tells the cleaner(s) who arrives tomorrow
+//  waldeleHeating  answers the Loxone Miniserver in Waldele: 1 = heat, 0 = nobody booked
 //
 // Deploy:  npx firebase-tools deploy --only functions
 
@@ -11,6 +12,7 @@ import { getFirestore } from 'firebase-admin/firestore'
 import { getMessaging } from 'firebase-admin/messaging'
 import { setGlobalOptions } from 'firebase-functions/v2'
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore'
+import { onRequest } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 
 initializeApp()
@@ -19,6 +21,7 @@ const db = getFirestore()
 
 const APP_URL = 'https://feldele.web.app/'
 const TIME_ZONE = 'Europe/Zurich'
+const HOUSE_NAMES = { feldele: 'Feldele', waldele: 'Waldele' }
 
 const dayFmt = new Intl.DateTimeFormat('de-CH', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 const formatDay = (day) => dayFmt.format(new Date(`${day}T00:00:00Z`))
@@ -38,10 +41,11 @@ async function roomNames(roomIds) {
 }
 
 /** Creates an in-app notification for every cleaner; sendPush then delivers it. */
-async function notifyCleaners(title, body) {
+/** Each cleaner works in one house (profiles.cleanerHouse, missing = Feldele). */
+async function notifyCleaners(house, title, body) {
   const cleaners = await db.collection('profiles').where('role', '==', 'cleaner').get()
   const batch = db.batch()
-  for (const c of cleaners.docs) {
+  for (const c of cleaners.docs.filter((d) => (d.get('cleanerHouse') ?? 'feldele') === house)) {
     batch.create(db.collection('notifications').doc(), {
       userId: c.id, kind: 'cleaner', title, body, read: false, createdAt: new Date().toISOString(),
     })
@@ -82,13 +86,13 @@ export const stayChanged = onDocumentWritten('reservations/{id}', async (event) 
   const isActive = after?.status === 'active'
   if (wasActive === isActive) return
   const stay = isActive ? after : before
-  // The cleaner works in Feldele; Waldele stays don't concern her.
-  if (stay.house === 'waldele') return
   // Stays that are already over don't matter for cleaning.
   if (stay.end < new Date().toISOString().slice(0, 10)) return
+  const house = stay.house ?? 'feldele'
   const { who, text } = await describeStay(stay)
-  if (isActive) await notifyCleaners(`Neue Buchung: ${who}`, `${who} kommt ${text}.`)
-  else await notifyCleaners(`Buchung storniert: ${who}`, `${who} kommt doch nicht: ${text}.`)
+  const where = HOUSE_NAMES[house]
+  if (isActive) await notifyCleaners(house, `Neue Buchung ${where}: ${who}`, `${who} kommt ${text}.`)
+  else await notifyCleaners(house, `Buchung storniert ${where}: ${who}`, `${who} kommt doch nicht: ${text}.`)
 })
 
 export const cleanerReminder = onSchedule({ schedule: '0 8 * * *', timeZone: TIME_ZONE }, async () => {
@@ -96,8 +100,62 @@ export const cleanerReminder = onSchedule({ schedule: '0 8 * * *', timeZone: TIM
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE }).format(new Date(Date.now() + 86_400_000))
   const arrivals = await db.collection('reservations').where('start', '==', parts).where('status', '==', 'active').get()
   for (const doc of arrivals.docs) {
-    if (doc.id.startsWith('_') || doc.get('house') === 'waldele') continue
+    if (doc.id.startsWith('_')) continue
+    const house = doc.get('house') ?? 'feldele'
     const { who, text } = await describeStay(doc.data())
-    await notifyCleaners(`Morgen kommt ${who}`, `Anreise morgen: ${who}, ${text}.`)
+    await notifyCleaners(house, `Morgen kommt ${who} (${HOUSE_NAMES[house]})`, `Anreise morgen: ${who}, ${text}.`)
   }
+})
+
+// ── Waldele heating (Loxone) ─────────────────────────────────────────────
+// The Miniserver asks this address every few minutes (Loxone "Virtueller HTTP Eingang")
+// and gets "1" = heat (a guest arrives within the preheat time or is there) or "0" = no one booked.
+// Nothing connects into the Waldele network; the Miniserver only needs internet.
+// Settings and the secret key are in Firestore loxone/config (owner edits them in the app).
+
+/** The moment `hour` o'clock on `day` (YYYY-MM-DD) in Swiss time. */
+function swissTime(day, hour) {
+  const guess = new Date(`${day}T${String(hour).padStart(2, '0')}:00:00Z`)
+  const inZurich = new Date(guess.toLocaleString('en-US', { timeZone: TIME_ZONE }))
+  const inUtc = new Date(guess.toLocaleString('en-US', { timeZone: 'UTC' }))
+  return new Date(guess.getTime() - (inZurich - inUtc))
+}
+
+export const waldeleHeating = onRequest({ invoker: 'public', cors: false }, async (req, res) => {
+  res.set('Cache-Control', 'no-store')
+  const config = (await db.doc('loxone/config').get()).data()
+  // Without the right key nobody learns when the house is empty.
+  if (!config?.key || req.query.key !== config.key) {
+    res.status(403).type('text/plain').send('forbidden')
+    return
+  }
+  const preheat = Number(config.preheatHours ?? 12)
+  const arrivalHour = Number(config.arrivalHour ?? 16)
+  const departureHour = Number(config.departureHour ?? 11)
+  const now = new Date()
+
+  const stays = (await db.collection('reservations').where('house', '==', 'waldele').get()).docs
+    .filter((d) => !d.id.startsWith('_') && d.get('status') === 'active')
+    .map((d) => {
+      const r = d.data()
+      const from = new Date(swissTime(r.start, arrivalHour).getTime() - preheat * 3_600_000)
+      return { from, to: swissTime(r.end, departureHour), start: r.start, end: r.end }
+    })
+    .filter((s) => s.to > now)
+    .sort((a, b) => a.from - b.from)
+
+  const current = stays.find((s) => s.from <= now && now < s.to)
+  const on = current ? 1 : 0
+  if (req.query.format === 'json') {
+    const next = stays.find((s) => s.from > now)
+    res.json({
+      heating: on,
+      reason: current ? `Aufenthalt ${current.start} – ${current.end}` : 'Kein Aufenthalt',
+      on: current ? current.from.toISOString() : next?.from.toISOString() ?? null,
+      off: current ? current.to.toISOString() : next?.to.toISOString() ?? null,
+      settings: { preheatHours: preheat, arrivalHour, departureHour },
+    })
+    return
+  }
+  res.type('text/plain').send(String(on))
 })

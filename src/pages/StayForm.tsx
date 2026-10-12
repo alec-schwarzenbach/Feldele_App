@@ -3,13 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Header } from '../components/ui'
 import { api } from '../lib/api'
 import { addDays, formatDay, formatRange, nightsBetween, today } from '../lib/dates'
-import { carConflicts, carOwnerName, claimDeadlineFrom, CLAIM_FREE_DAYS, freeCancelDeadline, planBooking, priorityFamilyFor, roomConflicts, roomsByArea } from '../lib/rules'
+import { carConflicts, carOwnerName, claimDeadlineFrom, CLAIM_FREE_DAYS, freeCancelDeadline, planBooking, priorityClanFor, priorityHolders, roomConflicts, roomsByArea } from '../lib/rules'
 import { useData } from '../lib/store'
-import { HOUSES, houseOf } from '../lib/types'
+import { HOUSES, houseOf, isOwner } from '../lib/types'
 
 export function StayForm() {
   const { id } = useParams()
-  const { user, data, mutate, name, familyName, house: selectedHouse } = useData()
+  const { user, data, mutate, name, house: selectedHouse } = useData()
   const nav = useNavigate()
   const existing = id ? data.reservations.find((r) => r.id === id) : undefined
   const house = existing ? houseOf(existing) : selectedHouse
@@ -31,12 +31,12 @@ export function StayForm() {
   const nights = nightsBetween(start, end)
   const validDates = end > start
   const draft = { id, start, end, roomIds, house }
-  const plan = validDates && (roomIds.length || wholeHouse) ? planBooking(draft, data.reservations, data.settings, existing?.userId ?? user.id, data.profiles) : { kind: 'free' as const }
+  const plan = validDates && (roomIds.length || wholeHouse) ? planBooking(draft, data.reservations, data.settings, existing?.userId ?? user.id, data.profiles, data.families) : { kind: 'free' as const }
   // Editing a confirmed stay can't take over other rooms; a "maybe" stay stays "maybe".
   const blocked = plan.kind === 'own' || (existing?.status === 'active' && plan.kind !== 'free')
   // Without rooms picked yet nothing clashes (except in a house without rooms, booked as a whole).
   const conflicts = validDates && (roomIds.length || wholeHouse) ? roomConflicts(data.reservations, draft) : []
-  const priorityId = priorityFamilyFor(Number(start.slice(0, 4)), data.settings)
+  const priorityId = priorityClanFor(Number(start.slice(0, 4)), data.settings)
   const takenRoom = (roomId: string) =>
     validDates && roomConflicts(data.reservations, { id, start, end, roomIds: [roomId], house }).length > 0
   const beds = roomIds.reduce((s, rid) => s + (data.rooms.find((r) => r.id === rid)?.beds ?? 0), 0)
@@ -56,7 +56,7 @@ export function StayForm() {
     if (roomIds.length === 0 && !wholeHouse) return alert('Wähle mindestens ein Zimmer.')
     if (blocked) return alert('Einige dieser Zimmer sind in dieser Zeit schon gebucht.')
     if (!existing && plan.kind === 'claim' && !confirm(
-      `Deine Familie hat ${start.slice(0, 4)} Priorität. ${[...new Set(plan.bump.map((b) => name(b.userId)))].join(', ')} ` +
+      `Du hast ${start.slice(0, 4)} Priorität. ${[...new Set(plan.bump.map((b) => name(b.userId)))].join(', ')} ` +
       `wird auf «Vielleicht» gesetzt und benachrichtigt.\n\nDu kannst ${weeks} Wochen lang gratis stornieren, danach bezahlst du auch, wenn du nicht gehst. Weiter?`,
     )) return
     setSaving(true)
@@ -76,7 +76,7 @@ export function StayForm() {
         for (const b of plan.bump) {
           await api.bumpReservation(b.id, r.id)
           await api.notifyStay(b.userId, 'Dein Aufenthalt ist jetzt «Vielleicht»',
-            `${user.name} (Familie ${familyName(user.familyId)}) hat ${start.slice(0, 4)} Priorität und hat ${formatRange(start, end)} gebucht. ` +
+            `${user.name} hat ${start.slice(0, 4)} Priorität und hat ${formatRange(start, end)} gebucht. ` +
             `Dein Aufenthalt ${formatRange(b.start, b.end)} ist jetzt «Vielleicht» – er wird wieder bestätigt, falls ${user.name} storniert.`)
         }
       }
@@ -143,14 +143,14 @@ export function StayForm() {
 
         {!existing && plan.kind === 'claim' && (
           <p className="info small">
-            ⭐ <strong>Deine Familie hat {start.slice(0, 4)} Priorität.</strong> Die Buchungen oben werden auf «Vielleicht» gesetzt.
+            ⭐ <strong>Du hast {start.slice(0, 4)} Priorität.</strong> Die Buchungen oben werden auf «Vielleicht» gesetzt.
             Danach kannst du {weeks} Wochen lang gratis stornieren – später bezahlst du auch, wenn du nicht gehst.
           </p>
         )}
         {!existing && plan.kind === 'maybe' && (
           <p className="info small warn-text">
             Diese Zimmer sind belegt, deshalb wird dein Aufenthalt <strong>«Vielleicht»</strong>. Er wird automatisch bestätigt,
-            wenn der andere Aufenthalt storniert wird. {priorityId && `(Familie ${familyName(priorityId)} hat ${start.slice(0, 4)} Priorität.)`}
+            wenn der andere Aufenthalt storniert wird. {priorityId && `(Priorität ${start.slice(0, 4)}: ${priorityHolders(priorityId, data.families, data.clans, isOwner(user))}.)`}
           </p>
         )}
 

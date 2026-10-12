@@ -15,9 +15,9 @@ import type {
   Settings,
   ShoppingItem,
 } from './types'
-import { isAdmin, isOwner, NO_FAMILY } from './types'
+import { houseOf, isAdmin, isOwner, NO_FAMILY, type House } from './types'
 import { CLANS, FAMILIES, familyId, WALDELE_CLAN_IDS } from './families'
-import { priorityFamilyFor, stayYear } from './rules'
+import { clanOf, priorityClanFor, stayYear } from './rules'
 
 // Demo backend: keeps everything in localStorage so the app can be tried
 // without any server. Each browser/phone has its own separate copy.
@@ -41,7 +41,7 @@ interface DB {
 
 const KEY = 'lodge-demo-db'
 const SESSION = 'lodge-demo-session'
-const VERSION = 8
+const VERSION = 9
 let demoReports: YearReportFile[] = []
 
 const uid = () => crypto.randomUUID()
@@ -69,6 +69,7 @@ function seed(): DB {
       p('u-chrisi', 'Chrisi', 'chrisi@lodge.test', 'member', familyId('Chrisi Schwarzenbach')),
       p('u-gunther', 'Günter Kobalt', 'guenther@lodge.test', 'car_keeper', NO_FAMILY),
       p('u-rosa', 'Rosa', 'rosa@lodge.test', 'cleaner', NO_FAMILY),
+      { ...p('u-erika', 'Erika', 'erika@lodge.test', 'cleaner', NO_FAMILY), cleanerHouse: 'waldele' as const },
     ],
     families: FAMILIES.map((f) => ({ ...f })),
     clans: CLANS.map((c) => ({ ...c })),
@@ -151,7 +152,7 @@ function seed(): DB {
     ],
     settings: {
       freeCancelMonths: 4, currency: 'CHF', lodgeName: 'Feldele', lodgeLat: 47.505, lodgeLng: 14.0,
-      priorityOrder: [familyId('Maria Specker'), familyId('Thomas Scott'), familyId('Alexis Schwarzenbach')], priorityStartYear: y,
+      priorityOrder: ['c4', 'c3', 'c1'], priorityStartYear: y,
       waldeleClanIds: WALDELE_CLAN_IDS,
     },
   }
@@ -215,8 +216,8 @@ export function createLocalApi(): Api {
   const emit = () => listeners.forEach((l) => l(sessionUser()))
   const ok = <T>(v: T) => Promise.resolve(structuredClone(v))
   const nameOf = (id: string) => db.profiles.find((p) => p.id === id)?.name ?? 'Jemand'
-  const notify = (role: Profile['role'], kind: AppNotification['kind'], title: string, body: string) => {
-    for (const p of db.profiles.filter((x) => x.role === role)) {
+  const notify = (role: Profile['role'], kind: AppNotification['kind'], title: string, body: string, house?: House) => {
+    for (const p of db.profiles.filter((x) => x.role === role && (!house || (x.cleanerHouse ?? 'feldele') === house))) {
       db.notifications.push({ id: uid(), userId: p.id, kind, title, body, read: false, createdAt: now() })
     }
   }
@@ -226,7 +227,8 @@ export function createLocalApi(): Api {
       what === 'new' ? `Neue Buchung: ${nameOf(r.userId)}` : `Buchung storniert: ${nameOf(r.userId)}`,
       what === 'new'
         ? `${nameOf(r.userId)} kommt ${formatRange(r.start, r.end)} mit ${r.people} Personen.`
-        : `${nameOf(r.userId)} kommt doch nicht (${formatRange(r.start, r.end)}).`)
+        : `${nameOf(r.userId)} kommt doch nicht (${formatRange(r.start, r.end)}).`,
+      houseOf(r))
 
   return {
     mode: 'demo',
@@ -325,6 +327,20 @@ export function createLocalApi(): Api {
     // No push in demo mode: notifications only appear inside the app.
     enablePush: () => Promise.resolve('unsupported'),
 
+    // Demo: kept in this browser only.
+    getLoxoneConfig: () => {
+      try {
+        return Promise.resolve(JSON.parse(localStorage.getItem('lodge-demo-loxone') ?? 'null'))
+      } catch {
+        return Promise.resolve(null)
+      }
+    },
+    saveLoxoneConfig: (c) => {
+      requireOwner()
+      localStorage.setItem('lodge-demo-loxone', JSON.stringify(c))
+      return Promise.resolve()
+    },
+
     getSettings: () => ok(db.settings),
     updateSettings: (patch) => change(() => {
       requireAdmin()
@@ -366,7 +382,7 @@ export function createLocalApi(): Api {
     bumpReservation: (id, byReservationId) =>
       change(() => {
         const r = db.reservations.find((x) => x.id === id)!
-        if (priorityFamilyFor(stayYear(r), db.settings) !== me().familyId) throw new Error('Das darf nur die Familie mit Priorität')
+        if (priorityClanFor(stayYear(r), db.settings) !== clanOf(me().id, db.profiles, db.families)) throw new Error('Das darf nur, wer dieses Jahr Priorität hat')
         notifyCleaner(r, 'cancelled')
         Object.assign(r, { status: 'tentative', bumpedBy: byReservationId })
       }),

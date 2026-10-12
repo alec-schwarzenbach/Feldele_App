@@ -29,7 +29,7 @@ import {
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage'
 import type { Api, YearReportFile } from './api'
 import { formatDay } from './dates'
-import type { AppNotification, CarBooking, Clan, Family, Post, Profile, Reservation, Room, Settings, ShoppingItem } from './types'
+import type { AppNotification, CarBooking, Clan, Family, LoxoneConfig, Post, Profile, Reservation, Room, Settings, ShoppingItem } from './types'
 import { isAdmin } from './types'
 
 // Real backend on Firebase. Documents store the same camelCase fields as the
@@ -151,6 +151,12 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
     },
     setShoppingDone: (id, done) => update('shopping', id, { done, doneBy: done ? myId() : undefined }),
     deleteShopping: (id) => remove('shopping', id),
+
+    async getLoxoneConfig() {
+      const snap = await getDoc(doc(db, 'loxone', 'config'))
+      return snap.exists() ? (snap.data() as LoxoneConfig) : null
+    },
+    saveLoxoneConfig: (c) => setDoc(doc(db, 'loxone', 'config'), c),
 
     async enablePush(ask) {
       // The token itself is the document id, so registering twice just refreshes it.

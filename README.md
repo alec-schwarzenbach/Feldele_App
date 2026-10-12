@@ -20,7 +20,7 @@ With no Firebase config the app runs in **demo mode**. Data is stored only in th
 | Area | What it does |
 |---|---|
 | **Stays** | Book arrival/departure, number of people, rooms and an optional party/occasion. If the rooms are taken, you can book as **"maybe"**, which becomes confirmed automatically if the other stay is cancelled. |
-| **Yearly priority** | The owner sets a rotation of families (repeats after the last). Every member of the priority family can take over dates another family booked; that stay becomes "maybe". They then have 4 weeks to cancel for free, after that it is binding. |
+| **Yearly priority** | The owner sets a rotation of **clans** (repeats after the last). Every family of the priority clan can take over dates another clan booked; that stay becomes "maybe". They then have 4 weeks to cancel for free, after that it is binding. Members only see the family names of the priority clan, never the clan name. |
 | **Cancelling** | Free unless someone else is affected: if someone is waiting ("maybe") for your rooms, it is free until 4 months before arrival, after that it counts toward your costs. "Maybe" stays are always free to cancel. |
 | **Car** | Calendar of car bookings, tied to a stay or on their own. Every booking notifies the car owner, Günter Kobalt, and nobody else. |
 | **Fishing** | Map of catches with species, length, weight, reason (starving / injured), bait, photo and date. Live GPS: the pin follows your position, or tap the map to set it by hand. |
@@ -30,6 +30,7 @@ With no Firebase config the app runs in **demo mode**. Data is stored only in th
 | **Clans (owner only)** | Groups of families that pay together. Never shown to members. |
 | **Two houses** | Feldele for everyone; **Waldele** only for the clans marked "Darf auch Waldele nutzen" (clan Alfred Schwarzenbach). They get a Waldele / Feldele switch in Stays and the shopping list, starting in Waldele. A house without rooms is booked as a whole. |
 | **Push notifications** | Real push on Android (app) and in the browser / iPhone home-screen app. Sent by the server functions in [functions/index.js](functions/index.js): every in-app notification, plus for the **cleaner**: new or cancelled stays and a reminder at 08:00 the day before each arrival. |
+| **Waldele heating (Loxone)** | `https://feldele.web.app/api/waldele-heizung?key=…` answers `1` (heat: from N hours before the arrival time until departure) or `0`. The Miniserver polls it with a "Virtueller HTTP Eingang"; nothing connects into the Waldele network. Key and times: Profil → Waldele-Heizung (owner). |
 | **Language** | The whole app is in German (de-CH dates and numbers). |
 | **Settings (admin)** | Rooms, house name and location, free-cancellation months, currency. |
 
@@ -39,7 +40,7 @@ With no Firebase config the app runs in **demo mode**. Data is stored only in th
 - **Admin**: everything except changing roles. Sees and edits rent, water, electricity and supplies, the cost per night and who owes what.
 - **Member**: Home (upcoming stays and who's been there, without money), Stays (to book), Fishing, Car and Board.
 - **Car owner** (Günter Kobalt): the only person who gets the car notifications. There can be only one. Does not pay.
-- **Cleaner**: sees stays, gets push notifications about new or cancelled stays and the day before each arrival. Does not pay.
+- **Cleaner**: one per house (set under Mitglieder). Sees that house's stays, gets push notifications about new or cancelled stays there and the day before each arrival. Does not pay.
 - **Waiting for approval**: everyone who signs up. They see nothing until the owner approves them under Profile → Members.
 
 Firebase enforces these rules too ([firestore.rules](firestore.rules), [storage.rules](storage.rules)), so they hold even outside the app.

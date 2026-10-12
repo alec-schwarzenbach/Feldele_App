@@ -15,6 +15,8 @@ export interface Profile {
   role: Role
   /** The family this person belongs to. Chosen right after sign-up; required to use the app. */
   familyId?: string
+  /** For the cleaner role: the house she cleans (she only gets that house's notifications). Missing = Feldele. */
+  cleanerHouse?: House
 }
 
 /** The two houses. Feldele is shared by everyone; Waldele only by the clans allowed in settings. */
@@ -171,7 +173,7 @@ export interface Settings {
   lodgeName: string
   lodgeLat: number
   lodgeLng: number
-  /** Priority rotation of family ids: priorityOrder[0] has priority in priorityStartYear, the next family the year after, and so on (repeating). */
+  /** Priority rotation of clan ids: priorityOrder[0] has priority in priorityStartYear, the next clan the year after, and so on (repeating). */
   priorityOrder: string[]
   priorityStartYear: number
   /** Clans whose families may also use Waldele (they see a house switch, Waldele first). */
@@ -180,3 +182,14 @@ export interface Settings {
 
 export const isAdmin = (p: Pick<Profile, 'role'>) => p.role === 'admin' || p.role === 'owner'
 export const isOwner = (p: Pick<Profile, 'role'>) => p.role === 'owner'
+/** Waldele heating via Loxone: the Miniserver polls a link that answers 1 (heat) or 0. */
+export interface LoxoneConfig {
+  /** Secret part of the link, so nobody else can see when the house is empty */
+  key: string
+  /** Heating starts this many hours before the arrival time */
+  preheatHours: number
+  /** Assumed arrival time on the arrival day (hour, Swiss time) */
+  arrivalHour: number
+  /** Heating may stop at this hour on the departure day, if nobody else comes */
+  departureHour: number
+}

@@ -43,10 +43,11 @@ service cloud.firestore {
         // admins fix names and move people between families
         || (admin() && changes().hasOnly(['name', 'familyId'])
             && (!('familyId' in request.resource.data) || familyExists(request.resource.data.familyId)))
-        // only the owner hands out roles, and never the owner role itself
+        // only the owner hands out roles (never the owner role itself) and sets which house a cleaner cleans
         || (owner() && uid != request.auth.uid && resource.data.role != 'owner'
             && request.resource.data.role in ['pending', 'member', 'admin', 'car_keeper', 'cleaner']
-            && changes().hasOnly(['role']));
+            && request.resource.data.get('cleanerHouse', 'feldele') in ['feldele', 'waldele']
+            && changes().hasOnly(['role', 'cleanerHouse']));
     }
 
     // ── Families: the names people pick when signing up ──
@@ -86,6 +87,11 @@ service cloud.firestore {
       allow delete: if approved();
     }
 
+    // ── Loxone heating for Waldele: secret key and times, owner only (the server reads it too) ──
+    match /loxone/{doc} {
+      allow read, write: if owner();
+    }
+
     // ── Saved yearly bills (Excel in Storage, link here): owner and admins only ──
     match /yearReports/{year} {
       allow read, write: if admin();
@@ -119,14 +125,15 @@ service cloud.firestore {
       return d.start is string && d.end is string && d.end > d.start
         && d.people is int && d.people > 0 && d.roomIds is list;
     }
-    // Does the signed-in user's family have priority in the year this stay starts?
-    // Same rotation as the app: priorityOrder[0] (a family id) in priorityStartYear, then the next, repeating.
+    // Does the signed-in user's clan (through their family) have priority in the year this stay starts?
+    // Same rotation as the app: priorityOrder[0] (a clan id) in priorityStartYear, then the next, repeating.
     function hasPriority(start) {
       let s = get(/databases/$(database)/documents/settings/main).data;
       let order = s.get('priorityOrder', []);
       let n = order.size();
       let offset = int(start.split('-')[0]) - s.get('priorityStartYear', 0);
-      return n > 0 && order[((offset % n) + n) % n] == me().get('familyId', '');
+      let fam = /databases/$(database)/documents/families/$(me().get('familyId', '_none'));
+      return n > 0 && exists(fam) && order[((offset % n) + n) % n] == get(fam).data.get('clanId', '');
     }
     // Today as YYYY-MM-DD (UTC), to compare with day strings.
     function todayDay() {
@@ -147,7 +154,7 @@ service cloud.firestore {
       allow read: if approved();
       allow create: if approved() && createsMine() && validStay(request.resource.data)
         && request.resource.data.status in ['active', 'tentative'] && validHouse(request.resource.data)
-        // only members of the year's priority family can take over other people's dates
+        // only members of the year's priority clan can take over other people's dates
         && (request.resource.data.get('priorityClaim', false) == false || hasPriority(request.resource.data.start));
       allow update: if admin()
         // edit your own open stay (dates, people, rooms, notes)
@@ -158,7 +165,7 @@ service cloud.firestore {
             && request.resource.data.status == 'cancelled'
             && changes().hasOnly(['status', 'lateCancel', 'cancelledAt'])
             && (request.resource.data.lateCancel == true || !claimExpired(resource.data)))
-        // a member of the priority family moves another family's stay to "maybe"
+        // a member of the priority clan moves another clan's stay to "maybe"
         || (approved() && !mine() && resource.data.status == 'active'
             && request.resource.data.status == 'tentative'
             && changes().hasOnly(['status', 'bumpedBy']) && hasPriority(resource.data.start))

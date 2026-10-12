@@ -4,14 +4,14 @@ import { PushPrompt } from '../components/PushPrompt'
 import { Avatar, Icon } from '../components/ui'
 import { api } from '../lib/api'
 import { formatDay, formatRange, timeAgo, today } from '../lib/dates'
-import { buildYearReport, familyLabel, priorityFamilyFor } from '../lib/rules'
+import { buildYearReport, clanOf, familyLabel, priorityClanFor, priorityHolders } from '../lib/rules'
 import { useData } from '../lib/store'
 import { HOUSES, houseOf, isOwner, type House } from '../lib/types'
 
 const people = (n: number) => `${n} ${n === 1 ? 'Person' : 'Personen'}`
 
 export function Home() {
-  const { user, data, mutate, name, familyName, houses } = useData()
+  const { user, data, mutate, name, houses } = useData()
   const nav = useNavigate()
   const t = today()
   // Only the houses this person may use; a small tag shows the house when there are two.
@@ -24,7 +24,7 @@ export function Home() {
     .filter((r) => r.userId === user.id && r.status !== 'cancelled' && r.end > t)
     .sort((a, b) => a.start.localeCompare(b.start))[0]
   const unread = data.notifications.filter((n) => !n.read)
-  const priorityId = priorityFamilyFor(Number(t.slice(0, 4)), data.settings)
+  const priorityId = priorityClanFor(Number(t.slice(0, 4)), data.settings)
   const staff = user.role === 'car_keeper' || user.role === 'cleaner'
 
   // Seeing the notifications here counts as having read them.
@@ -80,14 +80,14 @@ export function Home() {
 
         {priorityId && !staff && (
           <p className="info small">
-            ⭐ {priorityId === user.familyId
-              ? <>Deine Familie hat {t.slice(0, 4)} Priorität.</>
-              : <>Familie <strong>{familyName(priorityId)}</strong> hat {t.slice(0, 4)} Priorität.</>}
+            ⭐ {priorityId === clanOf(user.id, data.profiles, data.families)
+              ? <>Du hast {t.slice(0, 4)} Priorität.</>
+              : <>Priorität {t.slice(0, 4)}: <strong>{priorityHolders(priorityId, data.families, data.clans, isOwner(user))}</strong></>}
           </p>
         )}
 
         <section className="card">
-          <h2>{houses.length > 1 ? 'Jetzt dort' : `Jetzt im ${data.settings.lodgeName}`}</h2>
+          <h2>{houses.length > 1 ? 'Jetzt dort' : `Jetzt im ${HOUSES[houses[0]]}`}</h2>
           {hereNow.length === 0 ? (
             <p className="muted">Im Moment ist niemand dort.</p>
           ) : (

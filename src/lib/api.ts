@@ -7,6 +7,7 @@ import type {
   CostEntry,
   Family,
   House,
+  LoxoneConfig,
   Post,
   Profile,
   Reservation,
@@ -43,7 +44,7 @@ export interface Api {
   signOut(): Promise<void>
 
   listProfiles(): Promise<Profile[]>
-  updateProfile(id: string, patch: Partial<Pick<Profile, 'name' | 'familyId' | 'role'>>): Promise<void>
+  updateProfile(id: string, patch: Partial<Pick<Profile, 'name' | 'familyId' | 'role' | 'cleanerHouse'>>): Promise<void>
 
   /** Readable by everyone who is signed in, including people waiting for approval. */
   listFamilies(): Promise<Family[]>
@@ -70,6 +71,10 @@ export interface Api {
    * an already granted permission. The server then sends pushes to this device.
    */
   enablePush(ask: boolean): Promise<PushState>
+
+  /** Owner only: the Waldele heating link settings (Loxone). */
+  getLoxoneConfig(): Promise<LoxoneConfig | null>
+  saveLoxoneConfig(c: LoxoneConfig): Promise<void>
 
   getSettings(): Promise<Settings>
   updateSettings(patch: Partial<Settings>): Promise<void>
