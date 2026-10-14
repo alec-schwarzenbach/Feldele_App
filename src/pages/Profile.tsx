@@ -8,7 +8,7 @@ import { buildYearWorkbook, COST_LABELS } from '../lib/excel'
 import { resetDemoData } from '../lib/localApi'
 import { buildYearReport, priorityClanFor, roomLabel } from '../lib/rules'
 import { useData } from '../lib/store'
-import { HOUSES, houseOf, isAdmin, isOwner, NO_FAMILY, type Clan, type CostCategory, type Family, type House, type LoxoneConfig, type Profile as Member, type Role } from '../lib/types'
+import { HOUSES, houseOf, isAdmin, isOwner, NO_FAMILY, type Clan, type CostCategory, type Family, type HeatingZone, type House, type LoxoneConfig, type Profile as Member, type Role } from '../lib/types'
 
 const ROLE_LABELS: Record<Role, string> = {
   owner: 'Besitzer', admin: 'Admin', member: 'Mitglied', car_keeper: 'Autobesitzer', cleaner: 'Cleaner (Reinigung)',
@@ -525,7 +525,9 @@ function WaldeleHeating() {
   }
 
   if (config === undefined) return null
-  const url = config ? `${HEATING_URL}?key=${config.key}` : ''
+  // With zones the Miniserver gets one value per heating zone (";WOHN=1;BZ=0;…").
+  const zoned = !!config?.zones?.length
+  const url = config ? `${HEATING_URL}?key=${config.key}${zoned ? '&zones=1' : ''}` : ''
   const num = (field: 'preheatHours' | 'arrivalHour' | 'departureHour', label: string, max: number) => (
     <label>{label}
       <input type="number" min={0} max={max} value={config?.[field] ?? ''}
@@ -559,12 +561,18 @@ function WaldeleHeating() {
           <div className="grid2">
             {num('departureHour', 'Abreise um (Uhr)', 23)}
           </div>
+          <HeatingZones config={config} save={save} />
           <details className="small">
             <summary>So richtest du es in Loxone Config ein</summary>
             <ol>
-              <li>Peripherie → <strong>Virtueller HTTP Eingang</strong> hinzufügen, URL = Link oben, Abfragezyklus z. B. 300 s.</li>
-              <li>Darunter einen <strong>Virtuellen HTTP Eingang Befehl</strong>, Befehlserkennung: <code>\v</code></li>
-              <li>Den Ausgang (1/0) mit der Heizung verbinden, z. B. am Intelligenten Raumregler auf «Komfort» bzw. «Eco/Frostschutz».</li>
+              <li>Peripherie → <strong>einen</strong> <strong>Virtuellen HTTP Eingang</strong> hinzufügen, URL = Link oben, Abfragezyklus z. B. 300 s.</li>
+              {zoned ? (
+                <li>Darunter pro Zone einen <strong>Virtuellen HTTP Eingang Befehl</strong> mit der Befehlserkennung aus der Liste oben
+                  (z. B. <code>\i;BZ=\i\v</code>) und «Als Digitaleingang verwenden».</li>
+              ) : (
+                <li>Darunter einen <strong>Virtuellen HTTP Eingang Befehl</strong>, Befehlserkennung: <code>\v</code></li>
+              )}
+              <li>Jeden Befehl mit dem Schalter des passenden Raums verbinden (1 = heizen, 0 = aus/Frostschutz).</li>
               <li>In Loxone Config speichern und in den Miniserver laden.</li>
             </ol>
           </details>
@@ -573,5 +581,83 @@ function WaldeleHeating() {
         <button className="btn primary" onClick={newKey}>Link für den Miniserver erzeugen</button>
       )}
     </section>
+  )
+}
+
+/** Short Loxone code from a zone name: "Bad Blumenzimmer" → "BADBLUME" (unique, letters/digits). */
+function zoneCode(name: string, taken: string[]) {
+  const base = name.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Z0-9]/g, '').slice(0, 8) || 'ZONE'
+  let code = base
+  for (let i = 2; taken.includes(code); i++) code = `${base}${i}`
+  return code
+}
+
+/**
+ * Owner only: which Loxone heating zones turn on for which booked Waldele rooms.
+ * E.g. Blumenzimmer → zones "Blumenzimmer", "WC-Gang", "Bad Blumenzimmer"; living room always.
+ */
+function HeatingZones({ config, save }: { config: LoxoneConfig; save: (c: LoxoneConfig) => Promise<void> }) {
+  const { data } = useData()
+  const [newName, setNewName] = useState('')
+  const zones = config.zones ?? []
+  const rooms = data.rooms.filter((r) => houseOf(r) === 'waldele')
+  const setZones = (z: HeatingZone[]) => save({ ...config, zones: z })
+  const update = (code: string, patch: Partial<HeatingZone>) => setZones(zones.map((z) => (z.code === code ? { ...z, ...patch } : z)))
+
+  function suggest() {
+    // Living room always, plus one zone per Waldele room (switched by that room).
+    const list: HeatingZone[] = [{ code: 'WOHN', name: 'Wohnzimmer', rooms: [], always: true }]
+    for (const r of rooms) {
+      const short = r.code?.replace(/^W-/, '').toUpperCase()
+      list.push({ code: short && !list.some((z) => z.code === short) ? short : zoneCode(r.name, list.map((z) => z.code)), name: r.name, rooms: [r.id] })
+    }
+    return setZones(list)
+  }
+
+  function add(e: FormEvent) {
+    e.preventDefault()
+    const name = newName.trim()
+    if (!name) return
+    setZones([...zones, { code: zoneCode(name, zones.map((z) => z.code)), name, rooms: [] }])
+    setNewName('')
+  }
+
+  return (
+    <div className="zones">
+      <h3>Heizzonen</h3>
+      <p className="small muted">
+        Pro Zone ein Schalter in Loxone. Hake an, welche gebuchten Zimmer die Zone einschalten
+        (z. B. Blumenzimmer → Blumenzimmer, WC-Gang, Bad). «Immer» = sobald jemand im Haus ist.
+      </p>
+      {!zones.length && <button className="btn small" onClick={suggest}>Vorschlag: Wohnzimmer + ein Zimmer pro Zone</button>}
+      {zones.map((z) => (
+        <div key={z.code} className="zone">
+          <div className="row-head">
+            <strong>{z.name}</strong>
+            <span className="row-end">
+              <code className="small">\i;{z.code}=\i\v</code>
+              <button className="icon-btn" aria-label={`${z.name} löschen`}
+                onClick={() => confirm(`Zone «${z.name}» löschen? Auch den Befehl in Loxone entfernen.`) && setZones(zones.filter((x) => x.code !== z.code))}>
+                <Icon name="trash" size={16} />
+              </button>
+            </span>
+          </div>
+          <div className="chips">
+            <button className={'chip' + (z.always ? ' on' : '')} onClick={() => update(z.code, { always: !z.always })}>Immer</button>
+            {!z.always && rooms.map((r) => (
+              <button key={r.id} className={'chip' + (z.rooms.includes(r.id) ? ' on' : '')}
+                onClick={() => update(z.code, { rooms: z.rooms.includes(r.id) ? z.rooms.filter((x) => x !== r.id) : [...z.rooms, r.id] })}>
+                {r.name}
+              </button>
+            ))}
+          </div>
+          {!z.always && !z.rooms.length && <p className="small warn-text">Noch kein Zimmer angehakt – diese Zone bleibt aus.</p>}
+        </div>
+      ))}
+      <form className="comment-form" onSubmit={add}>
+        <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Neue Zone, z. B. WC-Gang" maxLength={40} />
+        <button className="btn small">Hinzufügen</button>
+      </form>
+    </div>
   )
 }

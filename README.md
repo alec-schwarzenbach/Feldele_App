@@ -30,7 +30,7 @@ With no Firebase config the app runs in **demo mode**. Data is stored only in th
 | **Clans (owner only)** | Groups of families that pay together. Never shown to members. |
 | **Two houses** | Feldele for everyone; **Waldele** only for the clans marked "Darf auch Waldele nutzen" (clan Alfred Schwarzenbach). They get a Waldele / Feldele switch in Stays and the shopping list, starting in Waldele. A house without rooms is booked as a whole. |
 | **Push notifications** | Real push on Android (app) and in the browser / iPhone home-screen app. Sent by the server functions in [functions/index.js](functions/index.js): every in-app notification, plus for the **cleaner**: new or cancelled stays and a reminder at 08:00 the day before each arrival. |
-| **Waldele heating (Loxone)** | `https://feldele.web.app/api/waldele-heizung?key=…` answers `1` (heat: from N hours before the arrival time until departure) or `0`. The Miniserver polls it with a "Virtueller HTTP Eingang"; nothing connects into the Waldele network. Key and times: Profil → Waldele-Heizung (owner). |
+| **Waldele heating (Loxone)** | `https://feldele.web.app/api/waldele-heizung?key=…` answers `1` (heat: from N hours before the arrival time until departure) or `0`. With heating zones (`&zones=1`) it answers per zone, e.g. `;ALLE=1;WOHN=1;BZ=1;WCG=1;H=0;`; each zone lists the booked rooms that switch it on, "always" zones follow any stay. One Loxone command per zone: `i;BZ=iv`. The Miniserver polls it with a "Virtueller HTTP Eingang"; nothing connects into the Waldele network. Key and times: Profil → Waldele-Heizung (owner). |
 | **Language** | The whole app is in German (de-CH dates and numbers). |
 | **Settings (admin)** | Rooms, house name and location, free-cancellation months, currency. |
 

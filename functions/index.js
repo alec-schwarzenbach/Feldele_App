@@ -110,6 +110,8 @@ export const cleanerReminder = onSchedule({ schedule: '0 8 * * *', timeZone: TIM
 // ── Waldele heating (Loxone) ─────────────────────────────────────────────
 // The Miniserver asks this address every few minutes (Loxone "Virtueller HTTP Eingang")
 // and gets "1" = heat (a guest arrives within the preheat time or is there) or "0" = no one booked.
+// With ?zones=1 it answers per heating zone, e.g. ";ALLE=1;WOHN=1;BZ=1;H=0;" (zones and the rooms
+// that switch them on are set in the app; "always" zones like the living room follow any stay).
 // Nothing connects into the Waldele network; the Miniserver only needs internet.
 // Settings and the secret key are in Firestore loxone/config (owner edits them in the app).
 
@@ -139,13 +141,26 @@ export const waldeleHeating = onRequest({ invoker: 'public', cors: false }, asyn
     .map((d) => {
       const r = d.data()
       const from = new Date(swissTime(r.start, arrivalHour).getTime() - preheat * 3_600_000)
-      return { from, to: swissTime(r.end, departureHour), start: r.start, end: r.end }
+      return { from, to: swissTime(r.end, departureHour), start: r.start, end: r.end, roomIds: r.roomIds ?? [] }
     })
     .filter((s) => s.to > now)
     .sort((a, b) => a.from - b.from)
 
-  const current = stays.find((s) => s.from <= now && now < s.to)
+  const heatingNow = stays.filter((s) => s.from <= now && now < s.to)
+  const current = heatingNow[0]
   const on = current ? 1 : 0
+
+  // Per heating zone: on if a stay in its heating window uses one of the zone's rooms.
+  // "always" zones (living room) are on whenever anyone is there; a stay without rooms
+  // (whole house) switches every zone on.
+  const usedRooms = new Set(heatingNow.flatMap((s) => s.roomIds))
+  const wholeHouse = heatingNow.some((s) => !s.roomIds.length)
+  const zones = (config.zones ?? []).map((z) => ({
+    code: z.code,
+    name: z.name,
+    on: on && (z.always || wholeHouse || (z.rooms ?? []).some((id) => usedRooms.has(id))) ? 1 : 0,
+  }))
+
   if (req.query.format === 'json') {
     const next = stays.find((s) => s.from > now)
     res.json({
@@ -153,8 +168,14 @@ export const waldeleHeating = onRequest({ invoker: 'public', cors: false }, asyn
       reason: current ? `Aufenthalt ${current.start} – ${current.end}` : 'Kein Aufenthalt',
       on: current ? current.from.toISOString() : next?.from.toISOString() ?? null,
       off: current ? current.to.toISOString() : next?.to.toISOString() ?? null,
+      zones,
       settings: { preheatHours: preheat, arrivalHour, departureHour },
     })
+    return
+  }
+  // ?zones=1 → ";WOHN=1;BZ=0;" – one Loxone command per zone reads its value (\i;BZ=\i\v).
+  if (req.query.zones) {
+    res.type('text/plain').send(`;${[`ALLE=${on}`, ...zones.map((z) => `${z.code}=${z.on}`)].join(';')};`)
     return
   }
   res.type('text/plain').send(String(on))

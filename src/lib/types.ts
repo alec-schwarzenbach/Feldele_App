@@ -192,4 +192,17 @@ export interface LoxoneConfig {
   arrivalHour: number
   /** Heating may stop at this hour on the departure day, if nobody else comes */
   departureHour: number
+  /** Heating zones (one Loxone command each); empty = only the single 1/0 answer */
+  zones?: HeatingZone[]
+}
+
+/** One heating circuit in Loxone and the booked rooms that switch it on. */
+export interface HeatingZone {
+  /** Short code Loxone looks for in the answer, e.g. BZ → ";BZ=1;" */
+  code: string
+  name: string
+  /** Room ids (Waldele) whose booking turns this zone on */
+  rooms: string[]
+  /** On whenever anyone is in the house (e.g. the living room) */
+  always?: boolean
 }
