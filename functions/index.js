@@ -110,7 +110,7 @@ export const cleanerReminder = onSchedule({ schedule: '0 8 * * *', timeZone: TIM
 // ── Waldele heating (Loxone) ─────────────────────────────────────────────
 // The Miniserver asks this address every few minutes (Loxone "Virtueller HTTP Eingang")
 // and gets "1" = heat (a guest arrives within the preheat time or is there) or "0" = no one booked.
-// With ?zones=1 it answers per heating zone, e.g. ";ALLE=1;WOHN=1;BZ=1;H=0;" (zones and the rooms
+// With ?zones=1 it answers per heating zone, e.g. ";ALLE=1;AUS=0;BZ=1;H=0;" (zones and the rooms
 // that switch them on are set in the app; "always" zones like the living room follow any stay).
 // Nothing connects into the Waldele network; the Miniserver only needs internet.
 // Settings and the secret key are in Firestore loxone/config (owner edits them in the app).
@@ -175,7 +175,8 @@ export const waldeleHeating = onRequest({ invoker: 'public', cors: false }, asyn
   }
   // ?zones=1 → ";WOHN=1;BZ=0;" – one Loxone command per zone reads its value (\i;BZ=\i\v).
   if (req.query.zones) {
-    res.type('text/plain').send(`;${[`ALLE=${on}`, ...zones.map((z) => `${z.code}=${z.on}`)].join(';')};`)
+    // AUS = 1 when nobody is (about to be) in the house – for a central "heating off".
+    res.type('text/plain').send(`;${[`ALLE=${on}`, `AUS=${on ? 0 : 1}`, ...zones.map((z) => `${z.code}=${z.on}`)].join(';')};`)
     return
   }
   res.type('text/plain').send(String(on))

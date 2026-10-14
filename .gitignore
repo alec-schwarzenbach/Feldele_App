@@ -40,3 +40,6 @@ GoogleService-Info.plist
 # Built app files
 *.apk
 *.aab
+
+# Loxone template (contains the secret heating key)
+VIU_*.xml

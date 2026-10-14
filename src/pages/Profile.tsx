@@ -629,6 +629,10 @@ function HeatingZones({ config, save }: { config: LoxoneConfig; save: (c: Loxone
         Pro Zone ein Schalter in Loxone. Hake an, welche gebuchten Zimmer die Zone einschalten
         (z. B. Blumenzimmer → Blumenzimmer, WC-Gang, Bad). «Immer» = sobald jemand im Haus ist.
       </p>
+      <p className="small">
+        Immer dabei: <code>{'\\i;AUS=\\i\\v'}</code> = niemand im Haus (für «Heizung Aus»),
+        {' '}<code>{'\\i;ALLE=\\i\\v'}</code> = jemand im Haus.
+      </p>
       {!zones.length && <button className="btn small" onClick={suggest}>Vorschlag: Wohnzimmer + ein Zimmer pro Zone</button>}
       {zones.map((z) => (
         <div key={z.code} className="zone">
