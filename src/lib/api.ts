@@ -8,6 +8,7 @@ import type {
   Family,
   House,
   LoxoneConfig,
+  LoxoneState,
   Post,
   Profile,
   Reservation,
@@ -75,6 +76,11 @@ export interface Api {
   /** Owner only: the Waldele heating link settings (Loxone). */
   getLoxoneConfig(): Promise<LoxoneConfig | null>
   saveLoxoneConfig(c: LoxoneConfig): Promise<void>
+  /** Stores the Loxone login for the server; it can never be read back. */
+  saveLoxoneLogin(user: string, password: string): Promise<void>
+  /** test = read the switches (changes nothing), sync = send the current state now */
+  loxoneCheck(mode: 'test' | 'sync'): Promise<{ ok: boolean; log: string[] }>
+  getLoxoneState(): Promise<LoxoneState | null>
 
   getSettings(): Promise<Settings>
   updateSettings(patch: Partial<Settings>): Promise<void>

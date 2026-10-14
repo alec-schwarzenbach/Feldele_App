@@ -29,7 +29,7 @@ import {
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage'
 import type { Api, YearReportFile } from './api'
 import { formatDay } from './dates'
-import type { AppNotification, CarBooking, Clan, Family, LoxoneConfig, Post, Profile, Reservation, Room, Settings, ShoppingItem } from './types'
+import type { AppNotification, CarBooking, Clan, Family, LoxoneConfig, LoxoneState, Post, Profile, Reservation, Room, Settings, ShoppingItem } from './types'
 import { isAdmin } from './types'
 
 // Real backend on Firebase. Documents store the same camelCase fields as the
@@ -157,6 +157,20 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
       return snap.exists() ? (snap.data() as LoxoneConfig) : null
     },
     saveLoxoneConfig: (c) => setDoc(doc(db, 'loxone', 'config'), c),
+    async saveLoxoneLogin(user, password) {
+      // Write-only: the rules let nobody read loxone/secret, only the server functions use it.
+      await setDoc(doc(db, 'loxone', 'secret'), { user: user.trim(), password })
+      await setDoc(doc(db, 'loxone', 'config'), { loginUser: user.trim() }, { merge: true })
+    },
+    async loxoneCheck(mode) {
+      const { getFunctions, httpsCallable } = await import('firebase/functions')
+      const call = httpsCallable<{ mode: string }, { ok: boolean; log: string[] }>(getFunctions(app, 'us-central1'), 'loxoneCheck')
+      return (await call({ mode })).data
+    },
+    async getLoxoneState() {
+      const snap = await getDoc(doc(db, 'loxone', 'state'))
+      return snap.exists() ? (snap.data() as LoxoneState) : null
+    },
 
     async enablePush(ask) {
       // The token itself is the document id, so registering twice just refreshes it.

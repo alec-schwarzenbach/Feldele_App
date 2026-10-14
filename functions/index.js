@@ -3,7 +3,9 @@
 //  sendPush        every new document in "notifications" becomes a push to that person's phones
 //  stayChanged     tells the cleaner(s) when a stay is confirmed or cancelled
 //  cleanerReminder every morning: tells the cleaner(s) who arrives tomorrow
-//  waldeleHeating  answers the Loxone Miniserver in Waldele: 1 = heat, 0 = nobody booked
+//  loxonePush      every 5 min: switches the Waldele heating in Loxone according to the bookings
+//  loxoneCheck     owner tests the Loxone connection from the app
+//  waldeleHeating  link the Miniserver can poll instead: 1 = heat, 0 = nobody booked
 //
 // Deploy:  npx firebase-tools deploy --only functions
 
@@ -12,7 +14,7 @@ import { getFirestore } from 'firebase-admin/firestore'
 import { getMessaging } from 'firebase-admin/messaging'
 import { setGlobalOptions } from 'firebase-functions/v2'
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore'
-import { onRequest } from 'firebase-functions/v2/https'
+import { HttpsError, onCall, onRequest } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 
 initializeApp()
@@ -108,12 +110,16 @@ export const cleanerReminder = onSchedule({ schedule: '0 8 * * *', timeZone: TIM
 })
 
 // ── Waldele heating (Loxone) ─────────────────────────────────────────────
-// The Miniserver asks this address every few minutes (Loxone "Virtueller HTTP Eingang")
-// and gets "1" = heat (a guest arrives within the preheat time or is there) or "0" = no one booked.
-// With ?zones=1 it answers per heating zone, e.g. ";ALLE=1;AUS=0;BZ=1;H=0;" (zones and the rooms
-// that switch them on are set in the app; "always" zones like the living room follow any stay).
-// Nothing connects into the Waldele network; the Miniserver only needs internet.
-// Settings and the secret key are in Firestore loxone/config (owner edits them in the app).
+// Two ways to bring the bookings to the Miniserver in Waldele:
+//
+//  loxonePush     (recommended) every 5 minutes the server switches the existing virtual
+//                 inputs in Loxone (e.g. "Blumenzimmer", "Heizung Aus") through the Loxone
+//                 Cloud – only when something changed, so manual switching stays possible.
+//  waldeleHeating the Miniserver polls a link instead ("Virtueller HTTP Eingang"):
+//                 "1"/"0", or per zone with ?zones=1, e.g. ";ALLE=1;AUS=0;BZ=1;H=0;".
+//
+// Settings: Firestore loxone/config (owner edits them in the app). The Loxone user and
+// password are in loxone/secret, which only the server can read.
 
 /** The moment `hour` o'clock on `day` (YYYY-MM-DD) in Swiss time. */
 function swissTime(day, hour) {
@@ -123,19 +129,15 @@ function swissTime(day, hour) {
   return new Date(guess.getTime() - (inZurich - inUtc))
 }
 
-export const waldeleHeating = onRequest({ invoker: 'public', cors: false }, async (req, res) => {
-  res.set('Cache-Control', 'no-store')
-  const config = (await db.doc('loxone/config').get()).data()
-  // Without the right key nobody learns when the house is empty.
-  if (!config?.key || req.query.key !== config.key) {
-    res.status(403).type('text/plain').send('forbidden')
-    return
-  }
+/**
+ * Which heating zones should be on right now. A stay heats from `preheatHours` before the
+ * arrival time until the departure time. A zone is on if a heating stay uses one of its rooms;
+ * "always" zones follow any stay; a stay without rooms (whole house) turns every zone on.
+ */
+async function heatingNow(config, now = new Date()) {
   const preheat = Number(config.preheatHours ?? 12)
   const arrivalHour = Number(config.arrivalHour ?? 16)
   const departureHour = Number(config.departureHour ?? 11)
-  const now = new Date()
-
   const stays = (await db.collection('reservations').where('house', '==', 'waldele').get()).docs
     .filter((d) => !d.id.startsWith('_') && d.get('status') === 'active')
     .map((d) => {
@@ -146,38 +148,145 @@ export const waldeleHeating = onRequest({ invoker: 'public', cors: false }, asyn
     .filter((s) => s.to > now)
     .sort((a, b) => a.from - b.from)
 
-  const heatingNow = stays.filter((s) => s.from <= now && now < s.to)
-  const current = heatingNow[0]
-  const on = current ? 1 : 0
-
-  // Per heating zone: on if a stay in its heating window uses one of the zone's rooms.
-  // "always" zones (living room) are on whenever anyone is there; a stay without rooms
-  // (whole house) switches every zone on.
-  const usedRooms = new Set(heatingNow.flatMap((s) => s.roomIds))
-  const wholeHouse = heatingNow.some((s) => !s.roomIds.length)
+  const heating = stays.filter((s) => s.from <= now && now < s.to)
+  const on = heating.length ? 1 : 0
+  const usedRooms = new Set(heating.flatMap((s) => s.roomIds))
+  const wholeHouse = heating.some((s) => !s.roomIds.length)
   const zones = (config.zones ?? []).map((z) => ({
     code: z.code,
     name: z.name,
+    input: z.input || z.name,
     on: on && (z.always || wholeHouse || (z.rooms ?? []).some((id) => usedRooms.has(id))) ? 1 : 0,
   }))
+  return {
+    on, zones, current: heating[0], next: stays.find((s) => s.from > now),
+    settings: { preheatHours: preheat, arrivalHour, departureHour },
+  }
+}
 
+export const waldeleHeating = onRequest({ invoker: 'public', cors: false }, async (req, res) => {
+  res.set('Cache-Control', 'no-store')
+  const config = (await db.doc('loxone/config').get()).data()
+  // Without the right key nobody learns when the house is empty.
+  if (!config?.key || req.query.key !== config.key) {
+    res.status(403).type('text/plain').send('forbidden')
+    return
+  }
+  const h = await heatingNow(config)
   if (req.query.format === 'json') {
-    const next = stays.find((s) => s.from > now)
     res.json({
-      heating: on,
-      reason: current ? `Aufenthalt ${current.start} – ${current.end}` : 'Kein Aufenthalt',
-      on: current ? current.from.toISOString() : next?.from.toISOString() ?? null,
-      off: current ? current.to.toISOString() : next?.to.toISOString() ?? null,
-      zones,
-      settings: { preheatHours: preheat, arrivalHour, departureHour },
+      heating: h.on,
+      reason: h.current ? `Aufenthalt ${h.current.start} – ${h.current.end}` : 'Kein Aufenthalt',
+      on: (h.current ?? h.next)?.from.toISOString() ?? null,
+      off: (h.current ?? h.next)?.to.toISOString() ?? null,
+      zones: h.zones.map(({ code, name, on }) => ({ code, name, on })),
+      settings: h.settings,
     })
     return
   }
-  // ?zones=1 → ";WOHN=1;BZ=0;" – one Loxone command per zone reads its value (\i;BZ=\i\v).
+  // ?zones=1 → ";ALLE=1;AUS=0;BZ=1;" – one Loxone command per zone reads its value (\i;BZ=\i\v).
+  // AUS = 1 when nobody is (about to be) in the house – for a central "heating off".
   if (req.query.zones) {
-    // AUS = 1 when nobody is (about to be) in the house – for a central "heating off".
-    res.type('text/plain').send(`;${[`ALLE=${on}`, `AUS=${on ? 0 : 1}`, ...zones.map((z) => `${z.code}=${z.on}`)].join(';')};`)
+    res.type('text/plain').send(`;${[`ALLE=${h.on}`, `AUS=${h.on ? 0 : 1}`, ...h.zones.map((z) => `${z.code}=${z.on}`)].join(';')};`)
     return
   }
-  res.type('text/plain').send(String(on))
+  res.type('text/plain').send(String(h.on))
+})
+
+// ── Switching the Miniserver directly through the Loxone Cloud ─────────────
+
+/** Remote Connect forwards connect.loxonecloud.com/<serial> to the Miniserver's own address. */
+async function miniserverBase(serial) {
+  const res = await fetch(`https://connect.loxonecloud.com/${encodeURIComponent(serial)}/`, { redirect: 'manual' })
+  const location = res.headers.get('location')
+  if (!location) throw new Error(`Loxone Cloud findet den Miniserver nicht (HTTP ${res.status})`)
+  return new URL(location, 'https://connect.loxonecloud.com').origin
+}
+
+/** One web-service call, e.g. path "dev/sps/io/Blumenzimmer/On". Returns the value Loxone reports. */
+async function miniserver(base, secret, path) {
+  const auth = 'Basic ' + Buffer.from(`${secret.user}:${secret.password}`).toString('base64')
+  let url = `${base}/${path}`
+  for (let hop = 0; hop < 3; hop++) {
+    // Follow redirects by hand so the login is sent along (fetch would drop it).
+    const res = await fetch(url, { headers: { Authorization: auth }, redirect: 'manual' })
+    if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
+      url = new URL(res.headers.get('location'), url).href
+      continue
+    }
+    const text = await res.text()
+    if (res.status === 401 || res.status === 403) throw new Error('Benutzer oder Passwort falsch, oder keine Berechtigung')
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const code = text.match(/Code="(\d+)"/)?.[1]
+    if (code && code !== '200') throw new Error(code === '404' ? 'Schalter mit diesem Namen nicht gefunden' : `Loxone meldet Code ${code}`)
+    return text.match(/value="([^"]*)"/)?.[1] ?? ''
+  }
+  throw new Error('Zu viele Weiterleitungen')
+}
+
+/** Switches whatever changed since the last run; with force everything is sent again. */
+async function pushHeating({ force = false } = {}) {
+  const config = (await db.doc('loxone/config').get()).data()
+  const secret = (await db.doc('loxone/secret').get()).data()
+  if (!config?.serial || !secret?.user) return { ok: false, log: ['Miniserver oder Loxone-Benutzer fehlt'] }
+  const h = await heatingNow(config)
+  const offInput = config.offInput || 'Heizung Aus'
+  // When heating starts, release "Heizung Aus" first; when it stops, switch the rooms off first.
+  const rooms = h.zones.map((z) => [z.input, z.on])
+  const plan = h.on ? [[offInput, 0], ...rooms] : [...rooms, [offInput, 1]]
+
+  const stateRef = db.doc('loxone/state')
+  const sent = force ? {} : (await stateRef.get()).data()?.sent ?? {}
+  const log = []
+  let base
+  for (const [input, value] of plan) {
+    if (sent[input] === value) continue
+    try {
+      base ??= await miniserverBase(config.serial)
+      await miniserver(base, secret, `dev/sps/io/${encodeURIComponent(input)}/${value ? 'On' : 'Off'}`)
+      sent[input] = value
+      log.push(`${input}: ${value ? 'ein' : 'aus'}`)
+    } catch (e) {
+      log.push(`${input}: Fehler – ${e.message}`)
+    }
+  }
+  const ok = !log.some((l) => l.includes('Fehler'))
+  await stateRef.set({ sent, at: new Date().toISOString(), log: log.length ? log : ['nichts zu ändern'], ok })
+  return { ok, log }
+}
+
+export const loxonePush = onSchedule({ schedule: 'every 5 minutes', timeZone: TIME_ZONE }, async () => {
+  const config = (await db.doc('loxone/config').get()).data()
+  if (config?.push) await pushHeating()
+})
+
+/** Owner only: test the connection (reads the switches, changes nothing) or send everything now. */
+export const loxoneCheck = onCall(async (req) => {
+  const uid = req.auth?.uid
+  if (!uid || (await db.doc(`profiles/${uid}`).get()).get('role') !== 'owner') {
+    throw new HttpsError('permission-denied', 'Nur für den Besitzer')
+  }
+  if (req.data?.mode === 'sync') return pushHeating({ force: true })
+
+  const config = (await db.doc('loxone/config').get()).data() ?? {}
+  const secret = (await db.doc('loxone/secret').get()).data()
+  if (!config.serial || !secret?.user) return { ok: false, log: ['Miniserver-Seriennummer, Benutzer oder Passwort fehlt'] }
+  const log = []
+  let base
+  try {
+    base = await miniserverBase(config.serial)
+    log.push(`Loxone Cloud: Miniserver gefunden`)
+  } catch (e) {
+    return { ok: false, log: [e.message] }
+  }
+  const inputs = [...(config.zones ?? []).map((z) => z.input || z.name), config.offInput || 'Heizung Aus']
+  for (const input of inputs) {
+    try {
+      const value = await miniserver(base, secret, `dev/sps/io/${encodeURIComponent(input)}`)
+      log.push(`${input}: gefunden (zurzeit ${Number(value) ? 'ein' : 'aus'})`)
+    } catch (e) {
+      log.push(`${input}: ${e.message}`)
+    }
+  }
+  return { ok: !log.some((l) => !l.includes('gefunden')), log }
 })

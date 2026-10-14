@@ -87,9 +87,18 @@ service cloud.firestore {
       allow delete: if approved();
     }
 
-    // ── Loxone heating for Waldele: secret key and times, owner only (the server reads it too) ──
-    match /loxone/{doc} {
+    // ── Loxone heating for Waldele: settings, login and last switching – owner only ──
+    match /loxone/config {
       allow read, write: if owner();
+    }
+    // Loxone user and password: the owner can set them, but nobody can read them back –
+    // only the server functions (which bypass these rules) use them.
+    match /loxone/secret {
+      allow write: if owner();
+    }
+    // What the server last switched (written by the server only).
+    match /loxone/state {
+      allow read: if owner();
     }
 
     // ── Saved yearly bills (Excel in Storage, link here): owner and admins only ──

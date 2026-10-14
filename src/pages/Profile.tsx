@@ -8,7 +8,7 @@ import { buildYearWorkbook, COST_LABELS } from '../lib/excel'
 import { resetDemoData } from '../lib/localApi'
 import { buildYearReport, priorityClanFor, roomLabel } from '../lib/rules'
 import { useData } from '../lib/store'
-import { HOUSES, houseOf, isAdmin, isOwner, NO_FAMILY, type Clan, type CostCategory, type Family, type HeatingZone, type House, type LoxoneConfig, type Profile as Member, type Role } from '../lib/types'
+import { HOUSES, houseOf, isAdmin, isOwner, NO_FAMILY, type Clan, type CostCategory, type Family, type HeatingZone, type House, type LoxoneConfig, type LoxoneState, type Profile as Member, type Role } from '../lib/types'
 
 const ROLE_LABELS: Record<Role, string> = {
   owner: 'Besitzer', admin: 'Admin', member: 'Mitglied', car_keeper: 'Autobesitzer', cleaner: 'Cleaner (Reinigung)',
@@ -539,21 +539,11 @@ function WaldeleHeating() {
     <section className="card">
       <h2>🔥 Waldele-Heizung (Loxone)</h2>
       <p className="small muted">
-        Der Miniserver fragt diesen Link alle paar Minuten ab. Antwort <strong>1</strong> = heizen
-        (ab {config?.preheatHours ?? 12} h vor der Anreise bis zur Abreise), <strong>0</strong> = niemand gebucht.
+        Geheizt wird ab {config?.preheatHours ?? 12} h vor der Anreise bis zur Abreise – nur in den Zonen der gebuchten Zimmer.
       </p>
       {config ? (
         <>
-          <input readOnly value={url} onFocus={(e) => e.target.select()} aria-label="Link für den Miniserver" />
-          <div className="row-end" style={{ gap: 8 }}>
-            <button className="btn small" onClick={() => navigator.clipboard?.writeText(url)}>Link kopieren</button>
-            <button className="btn small ghost" onClick={check}>Status prüfen</button>
-            <button className="btn small ghost danger-text"
-              onClick={() => confirm('Neuen Link erzeugen? Der alte funktioniert danach nicht mehr – im Miniserver ersetzen.') && newKey()}>
-              Neuer Schlüssel
-            </button>
-          </div>
-          {status && <p className="small">{status}</p>}
+          <LoxoneDirect config={config} save={save} />
           <div className="grid2">
             {num('preheatHours', 'Vorheizen (Stunden)', 72)}
             {num('arrivalHour', 'Anreise um (Uhr)', 23)}
@@ -563,7 +553,18 @@ function WaldeleHeating() {
           </div>
           <HeatingZones config={config} save={save} />
           <details className="small">
-            <summary>So richtest du es in Loxone Config ein</summary>
+            <summary>Alternative: der Miniserver fragt einen Link ab</summary>
+            <p className="muted">Nur nötig, wenn das direkte Schalten oben nicht möglich ist.</p>
+            <input readOnly value={url} onFocus={(e) => e.target.select()} aria-label="Link für den Miniserver" />
+            <div className="row-end" style={{ gap: 8, margin: '6px 0' }}>
+              <button className="btn small" onClick={() => navigator.clipboard?.writeText(url)}>Link kopieren</button>
+              <button className="btn small ghost" onClick={check}>Status prüfen</button>
+              <button className="btn small ghost danger-text"
+                onClick={() => confirm('Neuen Link erzeugen? Der alte funktioniert danach nicht mehr – im Miniserver ersetzen.') && newKey()}>
+                Neuer Schlüssel
+              </button>
+            </div>
+            {status && <p className="small">{status}</p>}
             <ol>
               <li>Peripherie → <strong>einen</strong> <strong>Virtuellen HTTP Eingang</strong> hinzufügen, URL = Link oben, Abfragezyklus z. B. 300 s.</li>
               {zoned ? (
@@ -646,6 +647,9 @@ function HeatingZones({ config, save }: { config: LoxoneConfig; save: (c: Loxone
               </button>
             </span>
           </div>
+          <label className="small">Loxone-Schalter
+            <input defaultValue={z.input ?? z.name} onBlur={(e) => e.target.value.trim() !== (z.input ?? z.name) && update(z.code, { input: e.target.value.trim() })} />
+          </label>
           <div className="chips">
             <button className={'chip' + (z.always ? ' on' : '')} onClick={() => update(z.code, { always: !z.always })}>Immer</button>
             {!z.always && rooms.map((r) => (
@@ -662,6 +666,97 @@ function HeatingZones({ config, save }: { config: LoxoneConfig; save: (c: Loxone
         <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Neue Zone, z. B. WC-Gang" maxLength={40} />
         <button className="btn small">Hinzufügen</button>
       </form>
+    </div>
+  )
+}
+
+/**
+ * Owner only: the server switches the existing Loxone switches (virtual inputs) through
+ * the Loxone Cloud – only when a booking changes, so manual switching stays possible.
+ */
+function LoxoneDirect({ config, save }: { config: LoxoneConfig; save: (c: LoxoneConfig) => Promise<void> }) {
+  const [serial, setSerial] = useState(config.serial ?? '504F94A2FBC1')
+  const [user, setUser] = useState(config.loginUser ?? '')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; log: string[] }>()
+  const [last, setLast] = useState<LoxoneState | null>()
+
+  useEffect(() => {
+    api.getLoxoneState().then(setLast).catch(() => setLast(null))
+  }, [])
+
+  async function saveLogin(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      await save({ ...config, serial: serial.trim(), loginUser: user.trim() })
+      if (password) await api.saveLoxoneLogin(user, password)
+      setPassword('')
+      setResult(await api.loxoneCheck('test'))
+    } catch (err) {
+      setResult({ ok: false, log: [(err as Error).message] })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function run(mode: 'test' | 'sync') {
+    setBusy(true)
+    try {
+      setResult(await api.loxoneCheck(mode))
+      if (mode === 'sync') setLast(await api.getLoxoneState())
+    } catch (err) {
+      setResult({ ok: false, log: [(err as Error).message] })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="zones">
+      <h3>Direkt schalten (Loxone Cloud)</h3>
+      <p className="small muted">
+        Die App schaltet alle 5 Minuten deine bestehenden Schalter in Loxone (z. B. «Blumenzimmer», «Heizung Aus») –
+        aber nur, wenn sich eine Buchung ändert. Manuelles Schalten in der Loxone-App bleibt möglich.
+        Am besten einen eigenen Loxone-Benutzer nur für die App anlegen.
+      </p>
+      <form className="form" onSubmit={saveLogin}>
+        <label>Miniserver-Seriennummer<input value={serial} onChange={(e) => setSerial(e.target.value)} required /></label>
+        <div className="grid2">
+          <label>Loxone-Benutzer<input value={user} onChange={(e) => setUser(e.target.value)} autoComplete="off" required /></label>
+          <label>Passwort
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password"
+              placeholder={config.loginUser ? 'gespeichert – nur zum Ändern' : ''} required={!config.loginUser} />
+          </label>
+        </div>
+        <p className="small muted">Das Passwort wird nur gespeichert, nie mehr angezeigt – auch nicht dir.</p>
+        <button className="btn" disabled={busy}>{busy ? '…' : 'Speichern & testen'}</button>
+      </form>
+
+      <label className="check">
+        <input type="checkbox" checked={!!config.push} disabled={!config.loginUser}
+          onChange={(e) => save({ ...config, push: e.target.checked })} />
+        Automatisch schalten
+      </label>
+      <label>Schalter für «alles aus»
+        <input value={config.offInput ?? 'Heizung Aus'} onChange={(e) => save({ ...config, offInput: e.target.value })} />
+      </label>
+      <div className="row-end" style={{ gap: 8 }}>
+        <button className="btn small ghost" disabled={busy || !config.loginUser} onClick={() => run('test')}>Verbindung testen</button>
+        <button className="btn small ghost" disabled={busy || !config.loginUser}
+          onClick={() => confirm('Jetzt alle Heizungs-Schalter in Loxone auf den Stand der Buchungen setzen?') && run('sync')}>
+          Jetzt senden
+        </button>
+      </div>
+      {result && (
+        <div className={'small ' + (result.ok ? '' : 'warn-text')}>
+          {result.log.map((l) => <div key={l}>{l}</div>)}
+        </div>
+      )}
+      {last && (
+        <p className="small muted">Zuletzt: {timeAgo(last.at)} – {last.log.join(' · ')}</p>
+      )}
     </div>
   )
 }

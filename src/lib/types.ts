@@ -194,6 +194,21 @@ export interface LoxoneConfig {
   departureHour: number
   /** Heating zones (one Loxone command each); empty = only the single 1/0 answer */
   zones?: HeatingZone[]
+  /** Direct switching through the Loxone Cloud (instead of the Miniserver polling the link) */
+  push?: boolean
+  /** Miniserver serial number, e.g. 504F94A2FBC1 (shown in Loxone Config) */
+  serial?: string
+  /** Loxone user for the app (the password is stored separately and can't be read back) */
+  loginUser?: string
+  /** Name of the Loxone switch that turns all heating off, default "Heizung Aus" */
+  offInput?: string
+}
+
+/** What the server last switched in Loxone. */
+export interface LoxoneState {
+  at: string
+  ok: boolean
+  log: string[]
 }
 
 /** One heating circuit in Loxone and the booked rooms that switch it on. */
@@ -205,4 +220,6 @@ export interface HeatingZone {
   rooms: string[]
   /** On whenever anyone is in the house (e.g. the living room) */
   always?: boolean
+  /** Name of the existing Loxone switch (virtual input) for this zone; default = zone name */
+  input?: string
 }

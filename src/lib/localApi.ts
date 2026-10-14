@@ -340,6 +340,14 @@ export function createLocalApi(): Api {
       localStorage.setItem('lodge-demo-loxone', JSON.stringify(c))
       return Promise.resolve()
     },
+    // Demo: nothing is switched; the password is not stored at all.
+    saveLoxoneLogin: async (user) => {
+      requireOwner()
+      const c = JSON.parse(localStorage.getItem('lodge-demo-loxone') ?? '{}')
+      localStorage.setItem('lodge-demo-loxone', JSON.stringify({ ...c, loginUser: user.trim() }))
+    },
+    loxoneCheck: async () => ({ ok: false, log: ['Im Demo-Modus wird nichts in Loxone geschaltet.'] }),
+    getLoxoneState: async () => null,
 
     getSettings: () => ok(db.settings),
     updateSettings: (patch) => change(() => {
