@@ -43,3 +43,7 @@ GoogleService-Info.plist
 
 # Loxone template (contains the secret heating key)
 VIU_*.xml
+
+# Loxone project (contains users and network details)
+*.Loxone
+*.loxone
