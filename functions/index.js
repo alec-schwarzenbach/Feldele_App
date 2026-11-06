@@ -73,6 +73,7 @@ export const sendPush = onDocumentCreated('notifications/{id}', async (event) =>
     webpush: { fcmOptions: { link: APP_URL } },
     apns: { payload: { aps: { sound: 'default' } } },
   })
+  console.log(`push ${n.kind}: ${res.successCount} sent, ${res.failureCount} failed`, res.responses.map((r) => r.error?.code).filter(Boolean))
   // Forget phones that uninstalled the app or turned notifications off.
   const dead = res.responses
     .map((r, i) => (!r.success && /registration-token-not-registered|invalid-registration-token|invalid-argument/.test(r.error?.code ?? '') ? tokens.docs[i].ref : null))

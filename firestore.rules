@@ -195,7 +195,8 @@ service cloud.firestore {
 
     // Car notifications go only to the car owner (Günter). Stay notifications
     // tell a member that their stay became "maybe" or confirmed. Cleaner
-    // notifications are only created by the server (functions/index.js).
+    // notifications are only created by the server (functions/index.js). A test
+    // notification ("Test senden" in the profile) can only go to yourself.
     // Only the recipient can read them.
     match /notifications/{id} {
       allow read, delete: if signedIn() && mine();
@@ -203,7 +204,9 @@ service cloud.firestore {
         (request.resource.data.kind == 'car'
           && get(profilePath(request.resource.data.userId)).data.role == 'car_keeper')
         || (request.resource.data.kind == 'stay'
-          && exists(profilePath(request.resource.data.userId))));
+          && exists(profilePath(request.resource.data.userId)))
+        || (request.resource.data.kind == 'test'
+          && request.resource.data.userId == request.auth.uid));
       allow update: if signedIn() && mine() && changes().hasOnly(['read']);
     }
 

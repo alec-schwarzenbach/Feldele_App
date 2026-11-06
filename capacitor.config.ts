@@ -10,6 +10,10 @@ const config: CapacitorConfig = {
   ios: {
     contentInset: 'never',
   },
+  plugins: {
+    // Also show pushes while the app is open.
+    PushNotifications: { presentationOptions: ['alert', 'sound'] },
+  },
 }
 
 export default config

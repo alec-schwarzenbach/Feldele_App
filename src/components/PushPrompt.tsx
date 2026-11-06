@@ -12,6 +12,7 @@ const DISMISS_KEY = 'feldele-push-later'
 export function PushPrompt({ compact = false, important = false }: { compact?: boolean; important?: boolean }) {
   const [state, setState] = useState<PushState>()
   const [busy, setBusy] = useState(false)
+  const [tested, setTested] = useState(false)
   const [dismissed, setDismissed] = useState(() => {
     try {
       return localStorage.getItem(DISMISS_KEY) === '1'
@@ -35,6 +36,18 @@ export function PushPrompt({ compact = false, important = false }: { compact?: b
     }
   }
 
+  async function test() {
+    setBusy(true)
+    try {
+      await api.testPush()
+      setTested(true)
+    } catch (e) {
+      alert('Test konnte nicht gesendet werden: ' + (e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (!state || api.mode === 'demo') return null
   const iphoneBrowser = /iPhone|iPad/.test(navigator.userAgent) && !(navigator as { standalone?: boolean }).standalone
 
@@ -53,6 +66,7 @@ export function PushPrompt({ compact = false, important = false }: { compact?: b
           </span>
         </span>
         {state === 'off' && <button className="btn small primary" onClick={enable} disabled={busy}>Einschalten</button>}
+        {state === 'on' && <button className="btn small ghost" onClick={test} disabled={busy || tested}>{tested ? 'Gesendet' : 'Test senden'}</button>}
       </div>
     )
   }

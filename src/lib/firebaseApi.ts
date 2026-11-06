@@ -70,6 +70,8 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
   // Inside the iOS/Android app, skip the browser-only sign-in helpers (they can hang in a WebView).
   const auth = Capacitor.isNativePlatform() ? initializeAuth(app, { persistence: indexedDBLocalPersistence }) : getAuth(app)
   const db = initializeFirestore(app, { ignoreUndefinedProperties: true })
+  let deviceToken: string | undefined
+  let nativeToken: Promise<string> | undefined
   const storage = getStorage(app)
   const col = (name: string) => collection(db, name)
 
@@ -117,6 +119,9 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
       await emit() // the auth listener fired before the profile existed
     },
     async signOut() {
+      // Otherwise this phone keeps getting the pushes of whoever signed out.
+      if (deviceToken) await deleteDoc(doc(db, 'pushTokens', deviceToken)).catch(() => {})
+      deviceToken = undefined
       await signOut(auth)
     },
 
@@ -174,20 +179,27 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
 
     async enablePush(ask) {
       // The token itself is the document id, so registering twice just refreshes it.
-      const save = (token: string, platform: 'web' | 'android' | 'ios') =>
-        setDoc(doc(db, 'pushTokens', token), { userId: myId(), platform, updatedAt: now() })
+      const save = (token: string, platform: 'web' | 'android' | 'ios') => {
+        deviceToken = token
+        return setDoc(doc(db, 'pushTokens', token), { userId: myId(), platform, updatedAt: now() })
+      }
 
       if (Capacitor.isNativePlatform()) {
         const { PushNotifications } = await import('@capacitor/push-notifications')
         let perm = await PushNotifications.checkPermissions()
         if (perm.receive !== 'granted' && ask) perm = await PushNotifications.requestPermissions()
         if (perm.receive !== 'granted') return perm.receive === 'denied' ? 'denied' : 'off'
-        const token = await new Promise<string>((resolve, reject) => {
+        // register() answers through events, so only one registration runs at a time.
+        nativeToken ??= new Promise<string>((resolve, reject) => {
+          setTimeout(() => reject(new Error('Keine Antwort vom Push-Dienst')), 15_000)
           PushNotifications.addListener('registration', (t) => resolve(t.value))
           PushNotifications.addListener('registrationError', (e) => reject(new Error(e.error)))
           PushNotifications.register()
+        }).finally(() => {
+          nativeToken = undefined
+          PushNotifications.removeAllListeners()
         })
-        await save(token, Capacitor.getPlatform() === 'ios' ? 'ios' : 'android')
+        await save(await nativeToken, Capacitor.getPlatform() === 'ios' ? 'ios' : 'android')
         return 'on'
       }
 
@@ -200,6 +212,12 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
       const token = await getToken(getMessaging(app), { serviceWorkerRegistration: registration })
       await save(token, 'web')
       return 'on'
+    },
+
+    async testPush() {
+      await addDoc(col('notifications'), {
+        userId: myId(), kind: 'test', title: 'Test von Feldele', body: 'Push-Benachrichtigungen funktionieren.', read: false, createdAt: now(),
+      })
     },
 
     async getSettings() {

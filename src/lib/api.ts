@@ -72,6 +72,8 @@ export interface Api {
    * an already granted permission. The server then sends pushes to this device.
    */
   enablePush(ask: boolean): Promise<PushState>
+  /** Sends a test push to the signed-in person's own devices. */
+  testPush(): Promise<void>
 
   /** Owner only: the Waldele heating link settings (Loxone). */
   getLoxoneConfig(): Promise<LoxoneConfig | null>

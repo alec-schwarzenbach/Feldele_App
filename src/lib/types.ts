@@ -109,7 +109,7 @@ export interface AppNotification {
   id: string
   userId: string
   /** car: only ever sent to the car owner. stay: changes to your own stay. */
-  kind: 'car' | 'stay' | 'cleaner'
+  kind: 'car' | 'stay' | 'cleaner' | 'test'
   title: string
   body: string
   read: boolean

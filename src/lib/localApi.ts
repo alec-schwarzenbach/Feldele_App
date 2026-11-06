@@ -326,6 +326,7 @@ export function createLocalApi(): Api {
 
     // No push in demo mode: notifications only appear inside the app.
     enablePush: () => Promise.resolve('unsupported'),
+    testPush: () => Promise.resolve(),
 
     // Demo: kept in this browser only.
     getLoxoneConfig: () => {
