@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
 
 const DEMO_USERS = [
@@ -83,6 +83,70 @@ export function Login() {
             ))}
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+/** Opened from the link in the reset e-mail (Firebase's action URL points here). */
+export function ResetPassword() {
+  const [code] = useState(() => new URLSearchParams(location.search).get('oobCode') ?? '')
+  const [email, setEmail] = useState<string>()
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [dead, setDead] = useState(false)
+  const [done, setDone] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    api.checkResetCode(code).then(setEmail).catch((e) => {
+      setError((e as Error).message)
+      setDead(true)
+    })
+  }, [code])
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      await api.confirmReset(code, password)
+      setDone(true)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const toLogin = () => location.replace('/')
+
+  return (
+    <div className="login">
+      <div className="login-hero">
+        <div className="login-logo">🏕️</div>
+        <h1>{done ? 'Passwort geändert' : 'Neues Passwort'}</h1>
+        {done && <p>Du kannst dich jetzt mit dem neuen Passwort anmelden.</p>}
+        {!done && email && <p>für {email}</p>}
+      </div>
+
+      {done && <button className="btn primary" onClick={toLogin}>Zur Anmeldung</button>}
+
+      {dead && (
+        <section className="card form">
+          <p className="error">{error}</p>
+          <p className="small muted">Fordere bei der Anmeldung unter «Passwort vergessen?» einen neuen Link an.</p>
+          <button className="btn primary" onClick={toLogin}>Zur Anmeldung</button>
+        </section>
+      )}
+
+      {!done && email && (
+        <form className="card form" onSubmit={submit}>
+          <label>Neues Passwort<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6}
+            autoComplete="new-password" autoFocus /></label>
+          {error && <p className="error">{error}</p>}
+          <button className="btn primary" disabled={busy}>Passwort speichern</button>
+        </form>
       )}
     </div>
   )

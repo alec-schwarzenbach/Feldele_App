@@ -44,6 +44,9 @@ export interface Api {
   signUp(name: string, email: string, password: string): Promise<void>
   /** Sends the "choose a new password" e-mail. */
   resetPassword(email: string): Promise<void>
+  /** The link in that e-mail: returns the account's e-mail, or fails if the link is no longer valid. */
+  checkResetCode(code: string): Promise<string>
+  confirmReset(code: string, password: string): Promise<void>
   signOut(): Promise<void>
 
   listProfiles(): Promise<Profile[]>

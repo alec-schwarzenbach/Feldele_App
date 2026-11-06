@@ -255,6 +255,8 @@ export function createLocalApi(): Api {
       emit()
     },
     resetPassword: () => Promise.resolve(),
+    checkResetCode: () => Promise.resolve('alec@lodge.test'),
+    confirmReset: () => Promise.resolve(),
     async signOut() {
       localStorage.removeItem(SESSION)
       emit()

@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app'
 import { Capacitor } from '@capacitor/core'
 import {
+  confirmPasswordReset,
   createUserWithEmailAndPassword,
   getAuth,
   indexedDBLocalPersistence,
@@ -9,6 +10,7 @@ import {
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
+  verifyPasswordResetCode,
 } from 'firebase/auth'
 import {
   addDoc,
@@ -122,6 +124,10 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
     },
     async resetPassword(email) {
       await sendPasswordResetEmail(auth, email.trim()).catch(friendly)
+    },
+    checkResetCode: (code) => verifyPasswordResetCode(auth, code).catch(friendly),
+    async confirmReset(code, password) {
+      await confirmPasswordReset(auth, code, password).catch(friendly)
     },
     async signOut() {
       // Otherwise this phone keeps getting the pushes of whoever signed out.
@@ -346,6 +352,8 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
   }
 }
 
+const RESET_LINK_DEAD = 'Dieser Link ist abgelaufen oder wurde schon benutzt.'
+
 const MESSAGES: Record<string, string> = {
   'auth/invalid-credential': 'E-Mail oder Passwort falsch',
   'auth/invalid-email': 'Diese E-Mail-Adresse stimmt nicht',
@@ -353,6 +361,8 @@ const MESSAGES: Record<string, string> = {
   'auth/weak-password': 'Das Passwort braucht mindestens 6 Zeichen',
   'auth/too-many-requests': 'Zu viele Versuche – bitte in ein paar Minuten nochmals',
   'auth/network-request-failed': 'Keine Internetverbindung',
+  'auth/expired-action-code': RESET_LINK_DEAD,
+  'auth/invalid-action-code': RESET_LINK_DEAD,
 }
 
 function friendly(e: { code?: string; message?: string }): never {

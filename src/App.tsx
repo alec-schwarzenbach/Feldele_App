@@ -6,7 +6,7 @@ import { Car, CarForm } from './pages/Car'
 import { CatchForm, Fishing } from './pages/Fishing'
 import { Home } from './pages/Home'
 import { ChooseFamily } from './pages/ChooseFamily'
-import { Login, Pending } from './pages/Login'
+import { Login, Pending, ResetPassword } from './pages/Login'
 import { Profile } from './pages/Profile'
 import { StayDetail } from './pages/StayDetail'
 import { StayForm } from './pages/StayForm'
@@ -15,6 +15,8 @@ import { Stays } from './pages/Stays'
 export default function App() {
   const { user, authReady, data } = useStore()
 
+  // The link in the reset e-mail works whether or not someone is signed in here.
+  if (location.pathname === '/passwort') return <div className="shell"><ResetPassword /></div>
   if (!authReady) return <div className="splash">🏕️</div>
   if (!user) return <div className="shell"><Login /></div>
   if (!user.familyId) return <div className="shell"><ChooseFamily /></div>
