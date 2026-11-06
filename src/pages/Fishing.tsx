@@ -12,7 +12,7 @@ import { useLivePosition, type LivePosition } from '../lib/useLivePosition'
 const SPECIES = ['Hecht', 'Bachforelle', 'Regenbogenforelle', 'Saibling', 'Egli', 'Zander', 'Karpfen', 'Äsche', 'Wels']
 
 const REASONS: { value: CatchReason; label: string; emoji: string }[] = [
-  { value: 'starving', label: 'Abgemagert', emoji: '🦴' },
+  { value: 'starving', label: 'Starving', emoji: '🦴' },
   { value: 'injured', label: 'Verletzt', emoji: '🩹' },
 ]
 const reasonLabel = (r?: CatchReason) => REASONS.find((x) => x.value === r)
