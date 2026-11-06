@@ -71,6 +71,7 @@ export function Profile() {
         {owner && <PrioritySettings />}
         {owner && <ClanSettings />}
         {owner && <WaldeleHeating />}
+        {owner && <MemberMail />}
 
         {admin && (
           <section className="card">
@@ -132,6 +133,42 @@ export function Profile() {
  * Owner only: the yearly bill. The Excel is built in the background, stored in
  * Firebase Storage, and only shown as a link (no costs table in the app).
  */
+function MemberMail() {
+  const [key, setKey] = useState('')
+  const [status, setStatus] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setStatus('')
+    try {
+      await api.saveMailKey(key.trim())
+      setKey('')
+      setStatus('Gespeichert ✓ Die Test-E-Mail ist unterwegs.')
+    } catch (err) {
+      setStatus('Nicht gespeichert: ' + (err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="card">
+      <h2>E-Mail bei neuen Mitgliedern</h2>
+      <p className="small muted">
+        Die Push-Mitteilung kommt automatisch. Für E-Mails: bei resend.com ein Gratis-Konto mit derselben E-Mail wie dein
+        Feldele-Konto erstellen, einen API-Key erstellen und hier einfügen. Er kann danach nicht mehr angezeigt werden.
+      </p>
+      <form className="form" onSubmit={submit}>
+        <label>Resend API-Key<input type="password" value={key} onChange={(e) => setKey(e.target.value)} required autoComplete="off" /></label>
+        <button className="btn" disabled={busy}>Speichern & testen</button>
+      </form>
+      {status && <p className="small">{status}</p>}
+    </section>
+  )
+}
+
 function YearlyBill() {
   const { data, mutate } = useData()
   const thisYear = new Date().getFullYear()

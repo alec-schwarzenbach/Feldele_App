@@ -15,15 +15,32 @@ export function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [info, setInfo] = useState('')
   const [busy, setBusy] = useState(false)
 
   async function submit(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
     setError('')
+    setInfo('')
     try {
       if (mode === 'in') await api.signIn(email, password)
       else await api.signUp(name, email, password)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function forgot() {
+    setError('')
+    setInfo('')
+    if (!email.trim()) return setError('Gib zuerst oben deine E-Mail ein.')
+    setBusy(true)
+    try {
+      await api.resetPassword(email)
+      setInfo('Falls es zu dieser E-Mail ein Konto gibt, ist ein Link zum Zurücksetzen unterwegs. Schau auch im Spam-Ordner nach.')
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -48,7 +65,9 @@ export function Login() {
           autoComplete={mode === 'in' ? 'current-password' : 'new-password'} /></label>
         {mode === 'up' && <p className="small muted">Danach wählst du deine Familie aus der Liste.</p>}
         {error && <p className="error">{error}</p>}
+        {info && <p className="small muted">{info}</p>}
         <button className="btn primary" disabled={busy}>{mode === 'in' ? 'Anmelden' : 'Konto erstellen'}</button>
+        {mode === 'in' && <button type="button" className="btn ghost" onClick={forgot} disabled={busy}>Passwort vergessen?</button>}
         <button type="button" className="btn ghost" onClick={() => setMode(mode === 'in' ? 'up' : 'in')}>
           {mode === 'in' ? 'Neu hier? Konto erstellen' : 'Ich habe schon ein Konto'}
         </button>

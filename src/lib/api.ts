@@ -42,6 +42,8 @@ export interface Api {
   onAuthChange(cb: (user: Profile | null) => void): () => void
   signIn(email: string, password: string): Promise<void>
   signUp(name: string, email: string, password: string): Promise<void>
+  /** Sends the "choose a new password" e-mail. */
+  resetPassword(email: string): Promise<void>
   signOut(): Promise<void>
 
   listProfiles(): Promise<Profile[]>
@@ -74,6 +76,8 @@ export interface Api {
   enablePush(ask: boolean): Promise<PushState>
   /** Sends a test push to the signed-in person's own devices. */
   testPush(): Promise<void>
+  /** Owner only: the server sends a test e-mail with this Resend key, then stores it (never readable). */
+  saveMailKey(key: string): Promise<void>
 
   /** Owner only: the Waldele heating link settings (Loxone). */
   getLoxoneConfig(): Promise<LoxoneConfig | null>

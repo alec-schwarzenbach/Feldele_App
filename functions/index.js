@@ -3,6 +3,8 @@
 //  sendPush        every new document in "notifications" becomes a push to that person's phones
 //  stayChanged     tells the cleaner(s) when a stay is confirmed or cancelled
 //  cleanerReminder every morning: tells the cleaner(s) who arrives tomorrow
+//  newMember       tells the owner (push and e-mail) when someone signs up
+//  saveMailKey     owner stores the Resend key for those e-mails
 //  loxonePush      every 5 min: switches the Waldele heating in Loxone according to the bookings
 //  loxoneCheck     owner tests the Loxone connection from the app
 //  waldeleHeating  link the Miniserver can poll instead: 1 = heat, 0 = nobody booked
@@ -79,6 +81,52 @@ export const sendPush = onDocumentCreated('notifications/{id}', async (event) =>
     .map((r, i) => (!r.success && /registration-token-not-registered|invalid-registration-token|invalid-argument/.test(r.error?.code ?? '') ? tokens.docs[i].ref : null))
     .filter(Boolean)
   await Promise.all(dead.map((ref) => ref.delete()))
+})
+
+/** Only for the owner: returns their profile. */
+async function requireOwner(req) {
+  const profile = req.auth?.uid ? await db.doc(`profiles/${req.auth.uid}`).get() : null
+  if (profile?.get('role') !== 'owner') throw new HttpsError('permission-denied', 'Nur für den Besitzer')
+  return profile
+}
+
+/** Without its own domain, Resend only delivers to the address of the Resend account. */
+async function sendMail(key, to, subject, text) {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: 'Feldele <onboarding@resend.dev>', to: [to], subject, text }),
+  })
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message ?? `Resend ${res.status}`)
+}
+
+export const newMember = onDocumentCreated('profiles/{id}', async (event) => {
+  const p = event.data?.data()
+  if (!p || event.params.id.startsWith('_') || p.role !== 'pending') return
+  const title = `Neues Mitglied: ${p.name}`
+  const body = `${p.name} (${p.email}) wartet auf deine Freischaltung.`
+  const owners = await db.collection('profiles').where('role', '==', 'owner').get()
+  const batch = db.batch()
+  for (const o of owners.docs) {
+    batch.create(db.collection('notifications').doc(), {
+      userId: o.id, kind: 'member', title, body, read: false, createdAt: new Date().toISOString(),
+    })
+  }
+  await batch.commit()
+  const key = (await db.doc('mail/secret').get()).get('key')
+  if (!key) return
+  await Promise.all(owners.docs.map((o) => sendMail(key, o.get('email'), title, `${body}\n\nFreischalten unter Profil → Mitglieder: ${APP_URL}`)))
+})
+
+export const saveMailKey = onCall(async (req) => {
+  const owner = await requireOwner(req)
+  const key = String(req.data?.key ?? '').trim()
+  try {
+    await sendMail(key, owner.get('email'), 'Feldele: Test-E-Mail', 'Ab jetzt bekommst du hier eine E-Mail, wenn sich jemand neu anmeldet.')
+  } catch (e) {
+    throw new HttpsError('failed-precondition', e.message)
+  }
+  await db.doc('mail/secret').set({ key })
 })
 
 export const stayChanged = onDocumentWritten('reservations/{id}', async (event) => {
@@ -263,10 +311,7 @@ export const loxonePush = onSchedule({ schedule: 'every 5 minutes', timeZone: TI
 
 /** Owner only: test the connection (reads the switches, changes nothing) or send everything now. */
 export const loxoneCheck = onCall(async (req) => {
-  const uid = req.auth?.uid
-  if (!uid || (await db.doc(`profiles/${uid}`).get()).get('role') !== 'owner') {
-    throw new HttpsError('permission-denied', 'Nur für den Besitzer')
-  }
+  await requireOwner(req)
   if (req.data?.mode === 'sync') return pushHeating({ force: true })
 
   const config = (await db.doc('loxone/config').get()).data() ?? {}

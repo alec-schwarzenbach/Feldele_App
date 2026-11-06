@@ -254,6 +254,7 @@ export function createLocalApi(): Api {
       localStorage.setItem(SESSION, p.id)
       emit()
     },
+    resetPassword: () => Promise.resolve(),
     async signOut() {
       localStorage.removeItem(SESSION)
       emit()
@@ -327,6 +328,7 @@ export function createLocalApi(): Api {
     // No push in demo mode: notifications only appear inside the app.
     enablePush: () => Promise.resolve('unsupported'),
     testPush: () => Promise.resolve(),
+    saveMailKey: () => Promise.resolve(),
 
     // Demo: kept in this browser only.
     getLoxoneConfig: () => {

@@ -6,6 +6,7 @@ import {
   indexedDBLocalPersistence,
   initializeAuth,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth'
@@ -70,6 +71,7 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
   // Inside the iOS/Android app, skip the browser-only sign-in helpers (they can hang in a WebView).
   const auth = Capacitor.isNativePlatform() ? initializeAuth(app, { persistence: indexedDBLocalPersistence }) : getAuth(app)
   const db = initializeFirestore(app, { ignoreUndefinedProperties: true })
+  auth.languageCode = 'de'
   let deviceToken: string | undefined
   let nativeToken: Promise<string> | undefined
   const storage = getStorage(app)
@@ -117,6 +119,9 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
         name: name.trim(), email: cred.user.email, role: 'pending', createdAt: now(),
       })
       await emit() // the auth listener fired before the profile existed
+    },
+    async resetPassword(email) {
+      await sendPasswordResetEmail(auth, email.trim()).catch(friendly)
     },
     async signOut() {
       // Otherwise this phone keeps getting the pushes of whoever signed out.
@@ -171,6 +176,10 @@ export function createFirebaseApi(config: FirebaseConfig): Api {
       const { getFunctions, httpsCallable } = await import('firebase/functions')
       const call = httpsCallable<{ mode: string }, { ok: boolean; log: string[] }>(getFunctions(app, 'us-central1'), 'loxoneCheck')
       return (await call({ mode })).data
+    },
+    async saveMailKey(key) {
+      const { getFunctions, httpsCallable } = await import('firebase/functions')
+      await httpsCallable(getFunctions(app, 'us-central1'), 'saveMailKey')({ key })
     },
     async getLoxoneState() {
       const snap = await getDoc(doc(db, 'loxone', 'state'))
