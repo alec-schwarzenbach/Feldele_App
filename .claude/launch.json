@@ -1,7 +1,6 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "lodge", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 5173 },
-    { "name": "demo-reset", "runtimeExecutable": "node", "runtimeArgs": ["-e", "import('vite').then(v=>v.createServer({envDir:'scripts',server:{port:5199}})).then(s=>s.listen())"], "port": 5199 }
+    { "name": "lodge", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 5173 }
   ]
 }
