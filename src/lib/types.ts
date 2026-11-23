@@ -200,7 +200,7 @@ export interface LoxoneConfig {
   serial?: string
   /** Loxone user for the app (the password is stored separately and can't be read back) */
   loginUser?: string
-  /** Name of the Loxone switch that turns all heating off, default "Heizung Aus" */
+  /** Name or ID of the Loxone switch for frost protection while nobody is there (default "Heizung Aus") */
   offInput?: string
 }
 

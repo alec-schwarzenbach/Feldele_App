@@ -183,8 +183,11 @@ function swissTime(day, hour) {
  * arrival time until the departure time. A zone is on if a heating stay uses one of its rooms;
  * "always" zones follow any stay; a stay without rooms (whole house) turns every zone on.
  */
+const MIN_PREHEAT_HOURS = 4
+
 async function heatingNow(config, now = new Date()) {
-  const preheat = Number(config.preheatHours ?? 12)
+  // Always at least 4 hours, so the rooms are warm when the guests arrive.
+  const preheat = Math.max(MIN_PREHEAT_HOURS, Number(config.preheatHours ?? 12))
   const arrivalHour = Number(config.arrivalHour ?? 16)
   const departureHour = Number(config.departureHour ?? 11)
   const stays = (await db.collection('reservations').where('house', '==', 'waldele').get()).docs
@@ -276,7 +279,8 @@ async function miniserver(base, secret, path) {
 }
 
 /** The zone name for the log, also when the switch is addressed by its Loxone ID. */
-const labelOf = (config, input) => config.zones?.find((z) => (z.input || z.name) === input)?.name ?? input
+const labelOf = (config, input) => input === (config.offInput || 'Heizung Aus') ? 'Frostschutz'
+  : config.zones?.find((z) => (z.input || z.name) === input)?.name ?? input
 
 /** Switches whatever changed since the last run; with force everything is sent again. */
 async function pushHeating({ force = false } = {}) {
@@ -285,14 +289,32 @@ async function pushHeating({ force = false } = {}) {
   if (!config?.serial || !secret?.user) return { ok: false, log: ['Miniserver oder Loxone-Benutzer fehlt'] }
   const h = await heatingNow(config)
   const offInput = config.offInput || 'Heizung Aus'
-  // When heating starts, release "Heizung Aus" first; when it stops, switch the rooms off first.
+  // The off input is the frost protection (house kept at 5 °C while nobody is there).
+  // When heating starts, end it first; when heating stops, switch the rooms off first.
   const rooms = h.zones.map((z) => [z.input, z.on])
   const plan = h.on ? [[offInput, 0], ...rooms] : [...rooms, [offInput, 1]]
 
   const stateRef = db.doc('loxone/state')
-  const sent = force ? {} : (await stateRef.get()).data()?.sent ?? {}
+  const before = (await stateRef.get()).data()?.sent ?? {}
+  const sent = force ? {} : { ...before }
+  // Switches the app no longer uses (e.g. after changing a zone's switch) are turned off once.
+  const planned = new Set(plan.map(([input]) => input))
+  const retired = Object.keys(before).filter((input) => !planned.has(input))
   const log = []
   let base
+  for (const input of retired) {
+    try {
+      if (before[input]) {
+        base ??= await miniserverBase(config.serial)
+        await miniserver(base, secret, `dev/sps/io/${encodeURIComponent(input)}/Off`)
+        log.push(`${labelOf(config, input)}: aus (nicht mehr verwendet)`)
+      }
+      delete sent[input]
+    } catch (e) {
+      sent[input] = before[input]
+      log.push(`${labelOf(config, input)}: Fehler – ${e.message}`)
+    }
+  }
   for (const [input, value] of plan) {
     if (sent[input] === value) continue
     try {

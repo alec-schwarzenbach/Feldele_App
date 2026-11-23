@@ -567,7 +567,7 @@ function WaldeleHeating() {
   const url = config ? `${HEATING_URL}?key=${config.key}${zoned ? '&zones=1' : ''}` : ''
   const num = (field: 'preheatHours' | 'arrivalHour' | 'departureHour', label: string, max: number) => (
     <label>{label}
-      <input type="number" min={0} max={max} value={config?.[field] ?? ''}
+      <input type="number" min={field === 'preheatHours' ? 4 : 0} max={max} value={config?.[field] ?? ''}
         onChange={(e) => config && save({ ...config, [field]: Number(e.target.value) })} />
     </label>
   )
@@ -576,7 +576,8 @@ function WaldeleHeating() {
     <section className="card">
       <h2>🔥 Waldele-Heizung (Loxone)</h2>
       <p className="small muted">
-        Geheizt wird ab {config?.preheatHours ?? 12} h vor der Anreise bis zur Abreise – nur in den Zonen der gebuchten Zimmer.
+        Geheizt wird ab {Math.max(4, config?.preheatHours ?? 12)} h vor der Anreise (mindestens 4 h) bis zur Abreise – nur in den
+        Zonen der gebuchten Zimmer. Ist niemand da, hält der Frostschutz das Haus auf 5 °C.
       </p>
       {config ? (
         <>
@@ -754,7 +755,7 @@ function LoxoneDirect({ config, save }: { config: LoxoneConfig; save: (c: Loxone
     <div className="zones">
       <h3>Direkt schalten (Loxone Cloud)</h3>
       <p className="small muted">
-        Die App schaltet alle 5 Minuten deine bestehenden Schalter in Loxone (z. B. «Blumenzimmer», «Heizung Aus») –
+        Die App schaltet alle 5 Minuten die Schalter in der Loxone-App (z. B. «Blumenzimmer», «Heizung Frostschutz») –
         aber nur, wenn sich eine Buchung ändert. Manuelles Schalten in der Loxone-App bleibt möglich.
         Am besten einen eigenen Loxone-Benutzer nur für die App anlegen.
       </p>
@@ -776,7 +777,7 @@ function LoxoneDirect({ config, save }: { config: LoxoneConfig; save: (c: Loxone
           onChange={(e) => save({ ...config, push: e.target.checked })} />
         Automatisch schalten
       </label>
-      <label>Schalter für «alles aus»
+      <label>Schalter für Frostschutz (niemand da)
         <input value={config.offInput ?? 'Heizung Aus'} onChange={(e) => save({ ...config, offInput: e.target.value })} />
       </label>
       <div className="row-end" style={{ gap: 8 }}>
