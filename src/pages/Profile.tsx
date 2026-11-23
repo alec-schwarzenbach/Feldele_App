@@ -577,7 +577,7 @@ function WaldeleHeating() {
       <h2>🔥 Waldele-Heizung (Loxone)</h2>
       <p className="small muted">
         Geheizt wird ab {Math.max(4, config?.preheatHours ?? 12)} h vor der Anreise (mindestens 4 h) bis zur Abreise – nur in den
-        Zonen der gebuchten Zimmer. Ist niemand da, hält der Frostschutz das Haus auf 5 °C.
+        Zonen der gebuchten Zimmer. Sind alle Raum-Schalter aus (auch von Hand), schaltet die App den Frostschutz ein (5 °C).
       </p>
       {config ? (
         <>

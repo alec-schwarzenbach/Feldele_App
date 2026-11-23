@@ -289,16 +289,15 @@ async function pushHeating({ force = false } = {}) {
   if (!config?.serial || !secret?.user) return { ok: false, log: ['Miniserver oder Loxone-Benutzer fehlt'] }
   const h = await heatingNow(config)
   const offInput = config.offInput || 'Heizung Aus'
-  // The off input is the frost protection (house kept at 5 °C while nobody is there).
-  // When heating starts, end it first; when heating stops, switch the rooms off first.
-  const rooms = h.zones.map((z) => [z.input, z.on])
-  const plan = h.on ? [[offInput, 0], ...rooms] : [...rooms, [offInput, 1]]
+  // The app only sets the room switches (when a booking starts or ends); the switches
+  // run the heating. Frost protection (house at 5 °C) follows the switches below.
+  const plan = h.zones.map((z) => [z.input, z.on])
 
   const stateRef = db.doc('loxone/state')
   const before = (await stateRef.get()).data()?.sent ?? {}
   const sent = force ? {} : { ...before }
   // Switches the app no longer uses (e.g. after changing a zone's switch) are turned off once.
-  const planned = new Set(plan.map(([input]) => input))
+  const planned = new Set([...plan.map(([input]) => input), offInput])
   const retired = Object.keys(before).filter((input) => !planned.has(input))
   const log = []
   let base
@@ -325,6 +324,19 @@ async function pushHeating({ force = false } = {}) {
     } catch (e) {
       log.push(`${labelOf(config, input)}: Fehler – ${e.message}`)
     }
+  }
+  // Frost protection whenever every room switch is off – also when someone switched them off by hand.
+  try {
+    base ??= await miniserverBase(config.serial)
+    const states = await Promise.all(plan.map(([input]) => miniserver(base, secret, `dev/sps/io/${encodeURIComponent(input)}`)))
+    const frost = states.some((v) => Number(v) > 0) ? 0 : 1
+    if (sent[offInput] !== frost) {
+      await miniserver(base, secret, `dev/sps/io/${encodeURIComponent(offInput)}/${frost ? 'On' : 'Off'}`)
+      sent[offInput] = frost
+      log.push(`Frostschutz: ${frost ? 'ein (alle Räume aus)' : 'aus'}`)
+    }
+  } catch (e) {
+    log.push(`Frostschutz: Fehler – ${e.message}`)
   }
   const ok = !log.some((l) => l.includes('Fehler'))
   await stateRef.set({ sent, at: new Date().toISOString(), log: log.length ? log : ['nichts zu ändern'], ok })
