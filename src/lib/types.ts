@@ -68,6 +68,14 @@ export interface Room {
 /** tentative = "maybe": the rooms are taken; it becomes active if the other stay is cancelled. */
 export type ReservationStatus = 'active' | 'tentative' | 'cancelled'
 
+/** What was really used on one night of a stay, when it differs from the booking. */
+export interface NightUsage {
+  /** The evening of the night, YYYY-MM-DD */
+  night: string
+  people: number
+  roomIds: string[]
+}
+
 export interface Reservation {
   id: string
   userId: string
@@ -80,6 +88,8 @@ export interface Reservation {
   /** Total number of people, including the member */
   people: number
   roomIds: string[]
+  /** Nights with fewer rooms or people than booked (only for the bill); other nights = as booked */
+  usage?: NightUsage[]
   occasion?: string
   note?: string
   status: ReservationStatus

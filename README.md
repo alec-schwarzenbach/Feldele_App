@@ -21,6 +21,7 @@ With no Firebase config the app runs in **demo mode**. Data is stored only in th
 |---|---|
 | **Stays** | Book arrival/departure, number of people, rooms and an optional party/occasion. If the rooms are taken, you can book as **"maybe"**, which becomes confirmed automatically if the other stay is cancelled. |
 | **Yearly priority** | The owner sets a rotation of **clans** (repeats after the last). Every family of the priority clan can take over dates another clan booked; that stay becomes "maybe". They then have 4 weeks to cancel for free, after that it is binding. Members only see the family names of the priority clan, never the clan name. |
+| **Usage per night** | When booking, and during or after the stay, "Nutzung pro Nacht" records nights with fewer rooms or people than booked (e.g. 3 rooms booked, 1 used only one night; someone left early). The yearly bill counts these real person-nights and room-nights; the rooms stay booked for the whole stay. |
 | **Cancelling** | Free unless someone else is affected: if someone is waiting ("maybe") for your rooms, it is free until 4 months before arrival, after that it counts toward your costs. "Maybe" stays are always free to cancel. |
 | **Car** | Calendar of car bookings, tied to a stay or on their own. Every booking notifies the car owner, Günter Kobalt, and nobody else. |
 | **Fishing** | Map of catches with species, length, weight, reason (starving / injured), bait, photo and date. Live GPS: the pin follows your position, or tap the map to set it by hand. |

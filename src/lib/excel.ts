@@ -2,6 +2,7 @@ import type { Borders, Fill, Font, Worksheet } from 'exceljs'
 import type { YearReport } from './rules'
 import type { CostCategory, CostEntry, Reservation } from './types'
 import { nightsInYear, toDate } from './dates'
+import { usageTotals } from './rules'
 
 export const COST_LABELS: Record<CostCategory, string> = {
   rent: 'Miete', electricity: 'Strom', water: 'Wasser', supplies: 'Material', other: 'Anderes',
@@ -52,8 +53,8 @@ export async function buildYearWorkbook(
 
   // ── Übersicht ──
   const ov = wb.addWorksheet('Übersicht', { views: [{ state: 'frozen', ySplit: 6 }] })
-  ov.columns = [{ width: 26 }, { width: 38 }, { width: 12 }, { width: 10 }, { width: 16 }, { width: 10 }, { width: 16 }]
-  title(ov, `${houseName} – Kostenabrechnung ${report.year}`, 7)
+  ov.columns = [{ width: 26 }, { width: 38 }, { width: 12 }, { width: 10 }, { width: 16 }, { width: 14 }, { width: 10 }, { width: 16 }]
+  title(ov, `${houseName} – Kostenabrechnung ${report.year}`, 8)
   ov.getCell('A3').value = 'Gesamtkosten'
   ov.getCell('B3').value = report.totalCosts
   ov.getCell('B3').numFmt = money
@@ -62,21 +63,21 @@ export async function buildYearWorkbook(
   ov.getCell('B4').numFmt = money
   for (const a of ['A3', 'A4']) ov.getCell(a).font = { bold: true }
   for (const a of ['B3', 'B4']) ov.getCell(a).alignment = { horizontal: 'left' }
-  header(ov, 6, ['Zahler (Clan / Familie)', 'Familien', 'Aufenthalte', 'Nächte', 'Personennächte', 'Anteil', 'Betrag'])
+  header(ov, 6, ['Zahler (Clan / Familie)', 'Familien', 'Aufenthalte', 'Nächte', 'Personennächte', 'Zimmernächte', 'Anteil', 'Betrag'])
   let r = 7
   for (const p of report.payers) {
     const row = ov.getRow(r++)
-    row.values = [p.name, p.families.map((f) => f.family?.name ?? 'Ohne Familie').join(', '), staysOf(p), p.nights, p.personNights, p.share, p.owed]
-    row.getCell(6).numFmt = '0.0%'
-    row.getCell(7).numFmt = money
+    row.values = [p.name, p.families.map((f) => f.family?.name ?? 'Ohne Familie').join(', '), staysOf(p), p.nights, p.personNights, p.roomNights, p.share, p.owed]
+    row.getCell(7).numFmt = '0.0%'
+    row.getCell(8).numFmt = money
     row.getCell(1).font = { bold: true }
     row.eachCell((c) => (c.border = thin))
   }
   const total = ov.getRow(r)
   total.values = ['Total', '', report.payers.reduce((s, p) => s + staysOf(p), 0), report.payers.reduce((s, p) => s + p.nights, 0),
-    report.totalPersonNights, 1, report.totalCosts]
-  total.getCell(6).numFmt = '0.0%'
-  total.getCell(7).numFmt = money
+    report.totalPersonNights, report.payers.reduce((s, p) => s + p.roomNights, 0), 1, report.totalCosts]
+  total.getCell(7).numFmt = '0.0%'
+  total.getCell(8).numFmt = money
   total.eachCell((c) => {
     c.font = { bold: true }
     c.fill = fill(LIGHT)
@@ -84,34 +85,34 @@ export async function buildYearWorkbook(
 
   // ── Details ──
   const dt = wb.addWorksheet('Details', { views: [{ state: 'frozen', ySplit: 3 }] })
-  dt.columns = [{ width: 22 }, { width: 20 }, { width: 20 }, { width: 12 }, { width: 9 }, { width: 15 }, { width: 14 }, { width: 8 }, { width: 9 }, { width: 15 }]
-  title(dt, `Details ${report.year}`, 10)
-  header(dt, 3, ['Clan / Zahler', 'Familie', 'Person', 'Aufenthalte', 'Nächte', 'Personennächte', 'davon späte Stornos', 'Feste', 'Anteil', 'Betrag'])
+  dt.columns = [{ width: 22 }, { width: 20 }, { width: 20 }, { width: 12 }, { width: 9 }, { width: 15 }, { width: 14 }, { width: 14 }, { width: 8 }, { width: 9 }, { width: 15 }]
+  title(dt, `Details ${report.year}`, 11)
+  header(dt, 3, ['Clan / Zahler', 'Familie', 'Person', 'Aufenthalte', 'Nächte', 'Personennächte', 'Zimmernächte', 'davon späte Stornos', 'Feste', 'Anteil', 'Betrag'])
   r = 4
   for (const p of report.payers) {
     const pr = dt.getRow(r++)
-    pr.values = [p.name, '', '', '', p.nights, p.personNights, '', '', p.share, p.owed]
+    pr.values = [p.name, '', '', '', p.nights, p.personNights, p.roomNights, '', '', p.share, p.owed]
     pr.eachCell((c) => {
       c.font = { bold: true, color: { argb: 'FFFFFFFF' } }
       c.fill = fill('FF2F5D47')
     })
     for (const f of p.families) {
       const fr = dt.getRow(r++)
-      fr.values = ['', f.family?.name ?? 'Ohne Familie', '', '', f.nights, f.personNights, '', '', f.share, f.owed]
+      fr.values = ['', f.family?.name ?? 'Ohne Familie', '', '', f.nights, f.personNights, f.roomNights, '', '', f.share, f.owed]
       fr.eachCell((c) => {
         c.font = { bold: true }
         c.fill = fill(LIGHT)
       })
       for (const m of f.members) {
         const mr = dt.getRow(r++)
-        mr.values = ['', '', m.user.name, m.stays, m.nights, m.personNights, m.lateCancelPersonNights || '', m.hosted || '', m.share, m.owed]
+        mr.values = ['', '', m.user.name, m.stays, m.nights, m.personNights, m.roomNights, m.lateCancelPersonNights || '', m.hosted || '', m.share, m.owed]
         mr.eachCell((c) => (c.border = thin))
       }
     }
   }
   for (let i = 4; i < r; i++) {
-    dt.getRow(i).getCell(9).numFmt = '0.0%'
-    dt.getRow(i).getCell(10).numFmt = money
+    dt.getRow(i).getCell(10).numFmt = '0.0%'
+    dt.getRow(i).getCell(11).numFmt = money
   }
 
   // ── Kosten ──
@@ -136,17 +137,18 @@ export async function buildYearWorkbook(
 
   // ── Waldele: usage only ──
   const wd = wb.addWorksheet('Waldele')
-  wd.columns = [{ width: 24 }, { width: 14 }, { width: 14 }, { width: 10 }, { width: 10 }, { width: 30 }]
-  title(wd, `Waldele – Aufenthalte ${report.year}`, 6)
-  header(wd, 3, ['Person', 'Anreise', 'Abreise', 'Nächte', 'Personen', 'Anlass'])
+  wd.columns = [{ width: 24 }, { width: 14 }, { width: 14 }, { width: 10 }, { width: 10 }, { width: 16 }, { width: 14 }, { width: 30 }]
+  title(wd, `Waldele – Aufenthalte ${report.year}`, 8)
+  header(wd, 3, ['Person', 'Anreise', 'Abreise', 'Nächte', 'Personen', 'Personennächte', 'Zimmernächte', 'Anlass'])
   r = 4
   const inYear = waldele.stays
     .filter((s) => s.status !== 'tentative' && nightsInYear(s.start, s.end, report.year) > 0 && (s.status === 'active' || s.lateCancel))
     .sort((a, b) => a.start.localeCompare(b.start))
   for (const s of inYear) {
     const row = wd.getRow(r++)
+    const used = usageTotals(s, { year: report.year })
     row.values = [waldele.who(s.userId), toDate(s.start), toDate(s.end), nightsInYear(s.start, s.end, report.year), s.people,
-      s.status === 'cancelled' ? 'spät storniert' : s.occasion ?? '']
+      used.personNights, used.roomNights, s.status === 'cancelled' ? 'spät storniert' : s.occasion ?? '']
     row.getCell(2).numFmt = 'dd.mm.yyyy'
     row.getCell(3).numFmt = 'dd.mm.yyyy'
     row.eachCell((c) => (c.border = thin))

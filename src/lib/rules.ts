@@ -1,5 +1,5 @@
 import { addDays, addMonths, nightsBetween, nightsInYear, overlaps, today } from './dates'
-import type { CarBooking, Clan, CostEntry, Family, House, Profile, Reservation, Room, Settings } from './types'
+import type { CarBooking, Clan, CostEntry, Family, House, NightUsage, Profile, Reservation, Room, Settings } from './types'
 import { houseOf } from './types'
 
 /** Days a priority user has to cancel for free after taking over someone else's dates. */
@@ -163,6 +163,7 @@ export interface MemberStats {
   stays: number
   nights: number
   personNights: number
+  roomNights: number
   lateCancelPersonNights: number
   hosted: number
   share: number
@@ -172,6 +173,7 @@ export interface MemberStats {
 interface Totals {
   nights: number
   personNights: number
+  roomNights: number
   share: number
   owed: number
 }
@@ -202,6 +204,7 @@ export interface YearReport {
 const addTotals = (into: Totals, from: Totals) => {
   into.nights += from.nights
   into.personNights += from.personNights
+  into.roomNights += from.roomNights
   into.share += from.share
   into.owed += from.owed
 }
@@ -232,6 +235,7 @@ export function buildYearReport(
     const mine = reservations.filter((r) => r.userId === user.id && isBillable(r) && r.start < upTo)
     let nights = 0
     let personNights = 0
+    let roomNights = 0
     let lateCancelPersonNights = 0
     let stays = 0
     let hosted = 0
@@ -241,14 +245,18 @@ export function buildYearReport(
       if (n === 0) continue
       if (r.status === 'cancelled') {
         lateCancelPersonNights += n * r.people
-      } else {
-        stays++
-        nights += n
-        if (r.occasion) hosted++
+        personNights += n * r.people
+        continue
       }
-      personNights += n * r.people
+      // What was really used per night (fewer rooms or people on some nights).
+      const used = usageTotals(r, { year, upTo })
+      stays++
+      nights += used.nights
+      personNights += used.personNights
+      roomNights += used.roomNights
+      if (r.occasion) hosted++
     }
-    return { user, stays, nights, personNights, lateCancelPersonNights, hosted, share: 0, owed: 0 }
+    return { user, stays, nights, personNights, roomNights, lateCancelPersonNights, hosted, share: 0, owed: 0 }
   })
 
   const totalPersonNights = rows.reduce((s, r) => s + r.personNights, 0)
@@ -261,7 +269,7 @@ export function buildYearReport(
   const byFamily = new Map<string, FamilyStats>()
   for (const row of rows) {
     const key = row.user.familyId ?? ''
-    const f = byFamily.get(key) ?? { family: families.find((x) => x.id === key), members: [], nights: 0, personNights: 0, share: 0, owed: 0 }
+    const f = byFamily.get(key) ?? { family: families.find((x) => x.id === key), members: [], nights: 0, personNights: 0, roomNights: 0, share: 0, owed: 0 }
     f.members.push(row)
     addTotals(f, row)
     byFamily.set(key, f)
@@ -273,7 +281,7 @@ export function buildYearReport(
     const clan = clans.find((c) => c.id === f.family?.clanId)
     const key = clan ? `clan:${clan.id}` : `family:${f.family?.id ?? ''}`
     const p = byPayer.get(key) ?? {
-      key, clan, name: clan ? clan.name : familyLabel(f.family), families: [], nights: 0, personNights: 0, share: 0, owed: 0,
+      key, clan, name: clan ? clan.name : familyLabel(f.family), families: [], nights: 0, personNights: 0, roomNights: 0, share: 0, owed: 0,
     }
     p.families.push(f)
     addTotals(p, f)
@@ -288,6 +296,28 @@ export const familyLabel = (f: Family | undefined) => f?.name ?? 'Ohne Familie'
 
 export function stayNights(r: Reservation): number {
   return nightsBetween(r.start, r.end)
+}
+
+type Usage = Pick<Reservation, 'start' | 'end' | 'people' | 'roomIds' | 'usage'>
+
+/** Every night of a stay as it was really used: as booked, unless that night was changed. */
+export function stayUsage(r: Usage): NightUsage[] {
+  const nights: NightUsage[] = []
+  for (let night = r.start; night < r.end; night = addDays(night, 1)) {
+    nights.push(r.usage?.find((u) => u.night === night) ?? { night, people: r.people, roomIds: r.roomIds })
+  }
+  return nights
+}
+
+/** Nights someone was there, person-nights and room-nights; optionally only one year and before `upTo`. */
+export function usageTotals(r: Usage, only: { year?: number; upTo?: string } = {}) {
+  const nights = stayUsage(r).filter((u) =>
+    (only.year === undefined || u.night.startsWith(`${only.year}-`)) && (only.upTo === undefined || u.night < only.upTo))
+  return {
+    nights: nights.filter((u) => u.people > 0).length,
+    personNights: nights.reduce((s, u) => s + u.people, 0),
+    roomNights: nights.reduce((s, u) => s + u.roomIds.length, 0),
+  }
 }
 
 /** Name of the person who gets the car notifications. */

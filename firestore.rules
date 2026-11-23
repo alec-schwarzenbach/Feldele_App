@@ -132,7 +132,9 @@ service cloud.firestore {
     // ── Reservations ──
     function validStay(d) {
       return d.start is string && d.end is string && d.end > d.start
-        && d.people is int && d.people > 0 && d.roomIds is list;
+        && d.people is int && d.people > 0 && d.roomIds is list
+        // nights with fewer rooms or people than booked (for the bill)
+        && (!('usage' in d) || (d.usage is list && d.usage.size() <= 366));
     }
     // Does the signed-in user's clan (through their family) have priority in the year this stay starts?
     // Same rotation as the app: priorityOrder[0] (a clan id) in priorityStartYear, then the next, repeating.

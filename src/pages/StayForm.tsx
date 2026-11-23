@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Header } from '../components/ui'
+import { UsageEditor } from '../components/UsageEditor'
 import { api } from '../lib/api'
 import { addDays, formatDay, formatRange, nightsBetween, today } from '../lib/dates'
 import { carConflicts, carOwnerName, claimDeadlineFrom, CLAIM_FREE_DAYS, freeCancelDeadline, planBooking, priorityClanFor, priorityHolders, roomConflicts, roomsByArea } from '../lib/rules'
 import { useData } from '../lib/store'
-import { HOUSES, houseOf, isOwner } from '../lib/types'
+import { HOUSES, houseOf, isOwner, type NightUsage } from '../lib/types'
 
 export function StayForm() {
   const { id } = useParams()
@@ -21,6 +22,7 @@ export function StayForm() {
   const [end, setEnd] = useState(existing?.end ?? addDays(today(), 10))
   const [people, setPeople] = useState(existing?.people ?? 2)
   const [roomIds, setRoomIds] = useState<string[]>(existing?.roomIds ?? [])
+  const [usage, setUsage] = useState<NightUsage[]>(existing?.usage ?? [])
   const [occasion, setOccasion] = useState(existing?.occasion ?? '')
   const [note, setNote] = useState(existing?.note ?? '')
   const [needCar, setNeedCar] = useState(false)
@@ -60,7 +62,9 @@ export function StayForm() {
       `wird auf «Vielleicht» gesetzt und benachrichtigt.\n\nDu kannst ${weeks} Wochen lang gratis stornieren, danach bezahlst du auch, wenn du nicht gehst. Weiter?`,
     )) return
     setSaving(true)
-    const fields = { start, end, people, roomIds, occasion: occasion.trim() || undefined, note: note.trim() || undefined }
+    // Changed nights only count inside the stay and for rooms that are still booked.
+    const used = usage.filter((u) => u.night >= start && u.night < end).map((u) => ({ ...u, roomIds: u.roomIds.filter((x) => roomIds.includes(x)) }))
+    const fields = { start, end, people, roomIds, usage: used.length ? used : undefined, occasion: occasion.trim() || undefined, note: note.trim() || undefined }
     const stayId = await mutate(async () => {
       if (existing) {
         await api.updateReservation(existing.id, fields)
@@ -140,6 +144,10 @@ export function StayForm() {
             </p>
           ))}
         </fieldset>
+
+        {validDates && (roomIds.length > 0 || wholeHouse) && (
+          <UsageEditor start={start} end={end} people={people} roomIds={roomIds} rooms={houseRooms} value={usage} onChange={setUsage} />
+        )}
 
         {!existing && plan.kind === 'claim' && (
           <p className="info small">

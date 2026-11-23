@@ -1,16 +1,19 @@
+import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { UsageEditor } from '../components/UsageEditor'
 import { Avatar, Empty, Header, Icon } from '../components/ui'
 import { api } from '../lib/api'
 import { formatDay, formatRange, today } from '../lib/dates'
-import { cancelTerms, promotable, roomLabel, stayNights, waitingFor } from '../lib/rules'
+import { cancelTerms, promotable, roomLabel, stayNights, usageTotals, waitingFor } from '../lib/rules'
 import { useData } from '../lib/store'
-import { HOUSES, houseOf, isAdmin } from '../lib/types'
+import { HOUSES, houseOf, isAdmin, type NightUsage } from '../lib/types'
 
 export function StayDetail() {
   const { id } = useParams()
   const { user, data, mutate, name } = useData()
   const nav = useNavigate()
   const r = data.reservations.find((x) => x.id === id)
+  const [usage, setUsage] = useState<NightUsage[] | undefined>()
   if (!r) return (<><Header title="Aufenthalt" back /><Empty>Aufenthalt nicht gefunden.</Empty></>)
 
   const canEdit = r.userId === user.id || isAdmin(user)
@@ -19,6 +22,16 @@ export function StayDetail() {
   const bumpedBy = r.bumpedBy ? data.reservations.find((x) => x.id === r.bumpedBy) : undefined
   const car = data.carBookings.filter((b) => b.reservationId === r.id)
   const isUpcoming = r.status !== 'cancelled' && r.end > today()
+  const used = usageTotals(r)
+  // From the first night on (and afterwards) you can record what you really used.
+  const canRecord = canEdit && r.status === 'active' && r.start <= today()
+  const houseRooms = data.rooms.filter((x) => houseOf(x) === houseOf(r))
+
+  async function saveUsage() {
+    const next = usage ?? []
+    await mutate(() => api.updateReservation(r!.id, { usage: next.length ? next : undefined }))
+    setUsage(undefined)
+  }
 
   async function cancel() {
     const msg = terms.charged
@@ -66,7 +79,8 @@ export function StayDetail() {
           <dl className="facts">
             <dt>Nächte</dt><dd>{stayNights(r)}</dd>
             <dt>Personen</dt><dd>{r.people}</dd>
-            <dt>Personennächte</dt><dd>{stayNights(r) * r.people}</dd>
+            <dt>Personennächte</dt><dd>{used.personNights}{r.usage?.length ? ` (gebucht ${stayNights(r) * r.people})` : ''}</dd>
+            {r.roomIds.length > 0 && (<><dt>Zimmernächte</dt><dd>{used.roomNights}{r.usage?.length ? ` (gebucht ${stayNights(r) * r.roomIds.length})` : ''}</dd></>)}
             <dt>Haus</dt><dd>{HOUSES[houseOf(r)]}</dd>
             <dt>Zimmer</dt><dd>{r.roomIds.length ? r.roomIds.map((rid) => roomLabel(data.rooms.find((x) => x.id === rid))).join(', ') : 'Ganzes Haus'}</dd>
             {r.occasion && (<><dt>Anlass</dt><dd>🎉 {r.occasion}</dd></>)}
@@ -75,6 +89,14 @@ export function StayDetail() {
             {waiting.length > 0 && (<><dt>Wartend</dt><dd>{waiting.map((w) => name(w.userId)).join(', ')} («Vielleicht»)</dd></>)}
           </dl>
         </section>
+
+        {canRecord && (
+          <section className="card form">
+            <UsageEditor start={r.start} end={r.end} people={r.people} roomIds={r.roomIds} rooms={houseRooms}
+              value={usage ?? r.usage ?? []} onChange={setUsage} />
+            {usage && <button className="btn primary" onClick={saveUsage}>Nutzung speichern</button>}
+          </section>
+        )}
 
         {isUpcoming && (
           <section className="card">

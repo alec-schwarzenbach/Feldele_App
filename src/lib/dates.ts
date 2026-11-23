@@ -58,6 +58,13 @@ export function formatRange(start: string, end: string): string {
   return `${formatDay(start, !sameYear)} – ${formatDay(end, true)}`
 }
 
+const fmtNight = new Intl.DateTimeFormat(LOCALE, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
+
+/** "Mo., 12. Jan." – a night is named after its evening. */
+export function formatNight(day: string): string {
+  return fmtNight.format(toDate(day))
+}
+
 export function timeAgo(iso: string): string {
   const s = (Date.now() - new Date(iso).getTime()) / 1000
   if (s < 60) return 'gerade eben'
