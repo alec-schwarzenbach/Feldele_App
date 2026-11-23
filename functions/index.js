@@ -267,11 +267,16 @@ async function miniserver(base, secret, path) {
     if (res.status === 401 || res.status === 403) throw new Error('Benutzer oder Passwort falsch, oder keine Berechtigung')
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const code = text.match(/Code="(\d+)"/)?.[1]
-    if (code && code !== '200') throw new Error(code === '404' ? 'Schalter mit diesem Namen nicht gefunden' : `Loxone meldet Code ${code}`)
+    if (code && code !== '200') throw new Error(code === '404' ? 'Schalter mit diesem Namen nicht gefunden'
+      : code === '500' ? 'Loxone meldet Code 500 – heisst noch etwas anderes so (z. B. ein Raum)? Dann die Loxone-ID des Schalters eintragen'
+      : `Loxone meldet Code ${code}`)
     return text.match(/value="([^"]*)"/)?.[1] ?? ''
   }
   throw new Error('Zu viele Weiterleitungen')
 }
+
+/** The zone name for the log, also when the switch is addressed by its Loxone ID. */
+const labelOf = (config, input) => config.zones?.find((z) => (z.input || z.name) === input)?.name ?? input
 
 /** Switches whatever changed since the last run; with force everything is sent again. */
 async function pushHeating({ force = false } = {}) {
@@ -294,9 +299,9 @@ async function pushHeating({ force = false } = {}) {
       base ??= await miniserverBase(config.serial)
       await miniserver(base, secret, `dev/sps/io/${encodeURIComponent(input)}/${value ? 'On' : 'Off'}`)
       sent[input] = value
-      log.push(`${input}: ${value ? 'ein' : 'aus'}`)
+      log.push(`${labelOf(config, input)}: ${value ? 'ein' : 'aus'}`)
     } catch (e) {
-      log.push(`${input}: Fehler – ${e.message}`)
+      log.push(`${labelOf(config, input)}: Fehler – ${e.message}`)
     }
   }
   const ok = !log.some((l) => l.includes('Fehler'))
@@ -329,9 +334,9 @@ export const loxoneCheck = onCall(async (req) => {
   for (const input of inputs) {
     try {
       const value = await miniserver(base, secret, `dev/sps/io/${encodeURIComponent(input)}`)
-      log.push(`${input}: gefunden (zurzeit ${Number(value) ? 'ein' : 'aus'})`)
+      log.push(`${labelOf(config, input)}: gefunden (zurzeit ${Number(value) ? 'ein' : 'aus'})`)
     } catch (e) {
-      log.push(`${input}: ${e.message}`)
+      log.push(`${labelOf(config, input)}: ${e.message}`)
     }
   }
   return { ok: !log.some((l) => !l.includes('gefunden')), log }

@@ -684,7 +684,7 @@ function HeatingZones({ config, save }: { config: LoxoneConfig; save: (c: Loxone
               </button>
             </span>
           </div>
-          <label className="small">Loxone-Schalter
+          <label className="small">Loxone-Schalter (Name oder Loxone-ID)
             <input defaultValue={z.input ?? z.name} onBlur={(e) => e.target.value.trim() !== (z.input ?? z.name) && update(z.code, { input: e.target.value.trim() })} />
           </label>
           <div className="chips">
